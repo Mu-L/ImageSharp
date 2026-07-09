@@ -325,6 +325,65 @@ internal static partial class PorterDuffFunctions
     }
 
     /// <summary>
+    /// Applies raster coverage to a Porter-Duff composition result.
+    /// </summary>
+    /// <param name="backdrop">The backdrop vector.</param>
+    /// <param name="source">The Porter-Duff composition result.</param>
+    /// <param name="coverage">The coverage. Range 0..1.</param>
+    /// <returns>The <see cref="Vector4"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector4 BlendWithCoverage(Vector4 backdrop, Vector4 source, float coverage)
+    {
+        Vector4 backdropAlpha = Numerics.PermuteW(backdrop);
+        Vector4 sourceAlpha = Numerics.PermuteW(source);
+        Vector4 backdropPremultiplied = Numerics.WithW(backdrop * backdropAlpha, backdropAlpha);
+        Vector4 sourcePremultiplied = Numerics.WithW(source * sourceAlpha, sourceAlpha);
+        Vector4 result = backdropPremultiplied + ((sourcePremultiplied - backdropPremultiplied) * coverage);
+
+        Numerics.UnPremultiply(ref result);
+        return result;
+    }
+
+    /// <summary>
+    /// Applies raster coverage to a Porter-Duff composition result.
+    /// </summary>
+    /// <param name="backdrop">The backdrop vector.</param>
+    /// <param name="source">The Porter-Duff composition result.</param>
+    /// <param name="coverage">The coverage. Range 0..1.</param>
+    /// <returns>The <see cref="Vector256{Single}"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector256<float> BlendWithCoverage(Vector256<float> backdrop, Vector256<float> source, Vector256<float> coverage)
+    {
+        Vector256<float> backdropAlpha = Avx.Permute(backdrop, ShuffleAlphaControl);
+        Vector256<float> sourceAlpha = Avx.Permute(source, ShuffleAlphaControl);
+        Vector256<float> backdropPremultiplied = Avx.Blend(backdrop * backdropAlpha, backdropAlpha, BlendAlphaControl);
+        Vector256<float> sourcePremultiplied = Avx.Blend(source * sourceAlpha, sourceAlpha, BlendAlphaControl);
+        Vector256<float> result = Vector256_.MultiplyAdd(backdropPremultiplied, sourcePremultiplied - backdropPremultiplied, coverage);
+
+        return Numerics.UnPremultiply(result, Avx.Permute(result, ShuffleAlphaControl));
+    }
+
+    /// <summary>
+    /// Applies raster coverage to a Porter-Duff composition result.
+    /// </summary>
+    /// <param name="backdrop">The backdrop vector.</param>
+    /// <param name="source">The Porter-Duff composition result.</param>
+    /// <param name="coverage">The coverage. Range 0..1.</param>
+    /// <returns>The <see cref="Vector512{Single}"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector512<float> BlendWithCoverage(Vector512<float> backdrop, Vector512<float> source, Vector512<float> coverage)
+    {
+        Vector512<float> backdropAlpha = Vector512_.ShuffleNative(backdrop, ShuffleAlphaControl);
+        Vector512<float> sourceAlpha = Vector512_.ShuffleNative(source, ShuffleAlphaControl);
+        Vector512<float> alphaMask = AlphaMask512();
+        Vector512<float> backdropPremultiplied = Vector512.ConditionalSelect(alphaMask, backdropAlpha, backdrop * backdropAlpha);
+        Vector512<float> sourcePremultiplied = Vector512.ConditionalSelect(alphaMask, sourceAlpha, source * sourceAlpha);
+        Vector512<float> result = Vector512_.MultiplyAdd(backdropPremultiplied, sourcePremultiplied - backdropPremultiplied, coverage);
+
+        return Numerics.UnPremultiply(result, Vector512_.ShuffleNative(result, ShuffleAlphaControl));
+    }
+
+    /// <summary>
     /// Helper function for Overlay and HardLight modes
     /// </summary>
     /// <param name="backdrop">Backdrop color element</param>
