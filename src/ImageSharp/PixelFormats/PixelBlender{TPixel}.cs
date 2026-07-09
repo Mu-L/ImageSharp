@@ -3,6 +3,7 @@
 
 using System.Buffers;
 using System.Numerics;
+using SixLabors.ImageSharp.PixelFormats.PixelBlenders;
 
 namespace SixLabors.ImageSharp.PixelFormats;
 
@@ -163,6 +164,162 @@ public abstract class PixelBlender<TPixel>
         PixelOperations<TPixel>.Instance.ToVector4(configuration, background[..maxLength], backgroundVectors, PixelConversionModifiers.Scale);
 
         this.BlendFunction(destinationVectors, backgroundVectors, source.ToScaledVector4(), amount);
+
+        PixelOperations<TPixel>.Instance.FromVector4Destructive(configuration, destinationVectors, destination, PixelConversionModifiers.Scale);
+    }
+
+    /// <summary>
+    /// Blends 2 rows together with per-pixel coverage.
+    /// </summary>
+    /// <typeparam name="TPixelSrc">the pixel format of the source span</typeparam>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source span</param>
+    /// <param name="amount">
+    /// A value between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    public void BlendWithCoverage<TPixelSrc>(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        ReadOnlySpan<TPixelSrc> source,
+        float amount,
+        ReadOnlySpan<float> coverage)
+        where TPixelSrc : unmanaged, IPixel<TPixelSrc>
+    {
+        int maxLength = destination.Length;
+        Guard.MustBeGreaterThanOrEqualTo(background.Length, maxLength, nameof(background.Length));
+        Guard.MustBeGreaterThanOrEqualTo(source.Length, maxLength, nameof(source.Length));
+        Guard.MustBeBetweenOrEqualTo(amount, 0, 1, nameof(amount));
+        Guard.MustBeGreaterThanOrEqualTo(coverage.Length, maxLength, nameof(coverage.Length));
+
+        using IMemoryOwner<Vector4> buffer = configuration.MemoryAllocator.Allocate<Vector4>(maxLength * 3);
+        this.BlendWithCoverage(
+            configuration,
+            destination,
+            background,
+            source,
+            amount,
+            coverage,
+            buffer.Memory.Span[..(maxLength * 3)]);
+    }
+
+    /// <summary>
+    /// Blends 2 rows together with per-pixel coverage using caller-provided temporary vector scratch.
+    /// </summary>
+    /// <typeparam name="TPixelSrc">the pixel format of the source span</typeparam>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source span</param>
+    /// <param name="amount">
+    /// A value between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    /// <param name="workingBuffer">Reusable temporary vector scratch with capacity for at least 3 rows.</param>
+    public void BlendWithCoverage<TPixelSrc>(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        ReadOnlySpan<TPixelSrc> source,
+        float amount,
+        ReadOnlySpan<float> coverage,
+        Span<Vector4> workingBuffer)
+        where TPixelSrc : unmanaged, IPixel<TPixelSrc>
+    {
+        int maxLength = destination.Length;
+        Guard.MustBeGreaterThanOrEqualTo(background.Length, maxLength, nameof(background.Length));
+        Guard.MustBeGreaterThanOrEqualTo(source.Length, maxLength, nameof(source.Length));
+        Guard.MustBeBetweenOrEqualTo(amount, 0, 1, nameof(amount));
+        Guard.MustBeGreaterThanOrEqualTo(coverage.Length, maxLength, nameof(coverage.Length));
+        Guard.MustBeGreaterThanOrEqualTo(workingBuffer.Length, maxLength * 3, nameof(workingBuffer.Length));
+
+        Span<Vector4> destinationVectors = workingBuffer[..maxLength];
+        Span<Vector4> backgroundVectors = workingBuffer.Slice(maxLength, maxLength);
+        Span<Vector4> sourceVectors = workingBuffer.Slice(maxLength * 2, maxLength);
+
+        PixelOperations<TPixel>.Instance.ToVector4(configuration, background[..maxLength], backgroundVectors, PixelConversionModifiers.Scale);
+        PixelOperations<TPixelSrc>.Instance.ToVector4(configuration, source[..maxLength], sourceVectors, PixelConversionModifiers.Scale);
+
+        this.BlendWithCoverageFunction(destinationVectors, backgroundVectors, sourceVectors, amount, coverage);
+
+        PixelOperations<TPixel>.Instance.FromVector4Destructive(configuration, destinationVectors, destination, PixelConversionModifiers.Scale);
+    }
+
+    /// <summary>
+    /// Blends a row against a constant source color with per-pixel coverage.
+    /// </summary>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source color</param>
+    /// <param name="amount">
+    /// A value between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    public void BlendWithCoverage(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        TPixel source,
+        float amount,
+        ReadOnlySpan<float> coverage)
+    {
+        int maxLength = destination.Length;
+        Guard.MustBeGreaterThanOrEqualTo(background.Length, maxLength, nameof(background.Length));
+        Guard.MustBeBetweenOrEqualTo(amount, 0, 1, nameof(amount));
+        Guard.MustBeGreaterThanOrEqualTo(coverage.Length, maxLength, nameof(coverage.Length));
+
+        using IMemoryOwner<Vector4> buffer = configuration.MemoryAllocator.Allocate<Vector4>(maxLength * 2);
+        this.BlendWithCoverage(
+            configuration,
+            destination,
+            background,
+            source,
+            amount,
+            coverage,
+            buffer.Memory.Span[..(maxLength * 2)]);
+    }
+
+    /// <summary>
+    /// Blends a row against a constant source color with per-pixel coverage using caller-provided temporary vector scratch.
+    /// </summary>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source color</param>
+    /// <param name="amount">
+    /// A value between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    /// <param name="workingBuffer">Reusable temporary vector scratch with capacity for at least 2 rows.</param>
+    public void BlendWithCoverage(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        TPixel source,
+        float amount,
+        ReadOnlySpan<float> coverage,
+        Span<Vector4> workingBuffer)
+    {
+        int maxLength = destination.Length;
+        Guard.MustBeGreaterThanOrEqualTo(background.Length, maxLength, nameof(background.Length));
+        Guard.MustBeBetweenOrEqualTo(amount, 0, 1, nameof(amount));
+        Guard.MustBeGreaterThanOrEqualTo(coverage.Length, maxLength, nameof(coverage.Length));
+        Guard.MustBeGreaterThanOrEqualTo(workingBuffer.Length, maxLength * 2, nameof(workingBuffer.Length));
+
+        Span<Vector4> destinationVectors = workingBuffer[..maxLength];
+        Span<Vector4> backgroundVectors = workingBuffer.Slice(maxLength, maxLength);
+
+        PixelOperations<TPixel>.Instance.ToVector4(configuration, background[..maxLength], backgroundVectors, PixelConversionModifiers.Scale);
+
+        this.BlendWithCoverageFunction(destinationVectors, backgroundVectors, source.ToScaledVector4(), amount, coverage);
 
         PixelOperations<TPixel>.Instance.FromVector4Destructive(configuration, destinationVectors, destination, PixelConversionModifiers.Scale);
     }
@@ -350,6 +507,206 @@ public abstract class PixelBlender<TPixel>
     }
 
     /// <summary>
+    /// Blends 2 rows together with per-pixel coverage.
+    /// </summary>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source span</param>
+    /// <param name="amount">
+    /// A span with values between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    public void BlendWithCoverage(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        ReadOnlySpan<TPixel> source,
+        ReadOnlySpan<float> amount,
+        ReadOnlySpan<float> coverage)
+        => this.BlendWithCoverage<TPixel>(configuration, destination, background, source, amount, coverage);
+
+    /// <summary>
+    /// Blends 2 rows together with per-pixel coverage using caller-provided temporary vector scratch.
+    /// </summary>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source span</param>
+    /// <param name="amount">
+    /// A span with values between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    /// <param name="workingBuffer">Reusable temporary vector scratch with capacity for at least 3 rows.</param>
+    public void BlendWithCoverage(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        ReadOnlySpan<TPixel> source,
+        ReadOnlySpan<float> amount,
+        ReadOnlySpan<float> coverage,
+        Span<Vector4> workingBuffer)
+        => this.BlendWithCoverage<TPixel>(configuration, destination, background, source, amount, coverage, workingBuffer);
+
+    /// <summary>
+    /// Blends 2 rows together with per-pixel coverage.
+    /// </summary>
+    /// <typeparam name="TPixelSrc">the pixel format of the source span</typeparam>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source span</param>
+    /// <param name="amount">
+    /// A span with values between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    public void BlendWithCoverage<TPixelSrc>(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        ReadOnlySpan<TPixelSrc> source,
+        ReadOnlySpan<float> amount,
+        ReadOnlySpan<float> coverage)
+        where TPixelSrc : unmanaged, IPixel<TPixelSrc>
+    {
+        int maxLength = destination.Length;
+        Guard.MustBeGreaterThanOrEqualTo(background.Length, maxLength, nameof(background.Length));
+        Guard.MustBeGreaterThanOrEqualTo(source.Length, maxLength, nameof(source.Length));
+        Guard.MustBeGreaterThanOrEqualTo(amount.Length, maxLength, nameof(amount.Length));
+        Guard.MustBeGreaterThanOrEqualTo(coverage.Length, maxLength, nameof(coverage.Length));
+
+        using IMemoryOwner<Vector4> buffer = configuration.MemoryAllocator.Allocate<Vector4>(maxLength * 3);
+        this.BlendWithCoverage(
+            configuration,
+            destination,
+            background,
+            source,
+            amount,
+            coverage,
+            buffer.Memory.Span[..(maxLength * 3)]);
+    }
+
+    /// <summary>
+    /// Blends a row against a constant source color with per-pixel coverage.
+    /// </summary>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source color</param>
+    /// <param name="amount">
+    /// A span with values between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    public void BlendWithCoverage(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        TPixel source,
+        ReadOnlySpan<float> amount,
+        ReadOnlySpan<float> coverage)
+    {
+        int maxLength = destination.Length;
+        Guard.MustBeGreaterThanOrEqualTo(background.Length, maxLength, nameof(background.Length));
+        Guard.MustBeGreaterThanOrEqualTo(amount.Length, maxLength, nameof(amount.Length));
+        Guard.MustBeGreaterThanOrEqualTo(coverage.Length, maxLength, nameof(coverage.Length));
+
+        using IMemoryOwner<Vector4> buffer = configuration.MemoryAllocator.Allocate<Vector4>(maxLength * 2);
+        this.BlendWithCoverage(
+            configuration,
+            destination,
+            background,
+            source,
+            amount,
+            coverage,
+            buffer.Memory.Span[..(maxLength * 2)]);
+    }
+
+    /// <summary>
+    /// Blends 2 rows together with per-pixel coverage using caller-provided temporary vector scratch.
+    /// </summary>
+    /// <typeparam name="TPixelSrc">the pixel format of the source span</typeparam>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source span</param>
+    /// <param name="amount">
+    /// A span with values between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    /// <param name="workingBuffer">Reusable temporary vector scratch with capacity for at least 3 rows.</param>
+    public void BlendWithCoverage<TPixelSrc>(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        ReadOnlySpan<TPixelSrc> source,
+        ReadOnlySpan<float> amount,
+        ReadOnlySpan<float> coverage,
+        Span<Vector4> workingBuffer)
+        where TPixelSrc : unmanaged, IPixel<TPixelSrc>
+    {
+        int maxLength = destination.Length;
+        Guard.MustBeGreaterThanOrEqualTo(background.Length, maxLength, nameof(background.Length));
+        Guard.MustBeGreaterThanOrEqualTo(source.Length, maxLength, nameof(source.Length));
+        Guard.MustBeGreaterThanOrEqualTo(amount.Length, maxLength, nameof(amount.Length));
+        Guard.MustBeGreaterThanOrEqualTo(coverage.Length, maxLength, nameof(coverage.Length));
+        Guard.MustBeGreaterThanOrEqualTo(workingBuffer.Length, maxLength * 3, nameof(workingBuffer.Length));
+
+        Span<Vector4> destinationVectors = workingBuffer[..maxLength];
+        Span<Vector4> backgroundVectors = workingBuffer.Slice(maxLength, maxLength);
+        Span<Vector4> sourceVectors = workingBuffer.Slice(maxLength * 2, maxLength);
+
+        PixelOperations<TPixel>.Instance.ToVector4(configuration, background[..maxLength], backgroundVectors, PixelConversionModifiers.Scale);
+        PixelOperations<TPixelSrc>.Instance.ToVector4(configuration, source[..maxLength], sourceVectors, PixelConversionModifiers.Scale);
+
+        this.BlendWithCoverageFunction(destinationVectors, backgroundVectors, sourceVectors, amount, coverage);
+
+        PixelOperations<TPixel>.Instance.FromVector4Destructive(configuration, destinationVectors, destination, PixelConversionModifiers.Scale);
+    }
+
+    /// <summary>
+    /// Blends a row against a constant source color with per-pixel coverage using caller-provided temporary vector scratch.
+    /// </summary>
+    /// <param name="configuration"><see cref="Configuration"/> to use internally</param>
+    /// <param name="destination">the destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source color</param>
+    /// <param name="amount">
+    /// A span with values between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    /// <param name="workingBuffer">Reusable temporary vector scratch with capacity for at least 2 rows.</param>
+    public void BlendWithCoverage(
+        Configuration configuration,
+        Span<TPixel> destination,
+        ReadOnlySpan<TPixel> background,
+        TPixel source,
+        ReadOnlySpan<float> amount,
+        ReadOnlySpan<float> coverage,
+        Span<Vector4> workingBuffer)
+    {
+        int maxLength = destination.Length;
+        Guard.MustBeGreaterThanOrEqualTo(background.Length, maxLength, nameof(background.Length));
+        Guard.MustBeGreaterThanOrEqualTo(amount.Length, maxLength, nameof(amount.Length));
+        Guard.MustBeGreaterThanOrEqualTo(coverage.Length, maxLength, nameof(coverage.Length));
+        Guard.MustBeGreaterThanOrEqualTo(workingBuffer.Length, maxLength * 2, nameof(workingBuffer.Length));
+
+        Span<Vector4> destinationVectors = workingBuffer[..maxLength];
+        Span<Vector4> backgroundVectors = workingBuffer.Slice(maxLength, maxLength);
+
+        PixelOperations<TPixel>.Instance.ToVector4(configuration, background[..maxLength], backgroundVectors, PixelConversionModifiers.Scale);
+
+        this.BlendWithCoverageFunction(destinationVectors, backgroundVectors, source.ToScaledVector4(), amount, coverage);
+
+        PixelOperations<TPixel>.Instance.FromVector4Destructive(configuration, destinationVectors, destination, PixelConversionModifiers.Scale);
+    }
+
+    /// <summary>
     /// Blend 2 rows together.
     /// </summary>
     /// <param name="destination">destination span</param>
@@ -412,4 +769,108 @@ public abstract class PixelBlender<TPixel>
         ReadOnlySpan<Vector4> background,
         Vector4 source,
         ReadOnlySpan<float> amount);
+
+    /// <summary>
+    /// Blend 2 rows together with per-pixel coverage.
+    /// </summary>
+    /// <param name="destination">destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source span</param>
+    /// <param name="amount">
+    /// A value between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    protected virtual void BlendWithCoverageFunction(
+        Span<Vector4> destination,
+        ReadOnlySpan<Vector4> background,
+        ReadOnlySpan<Vector4> source,
+        float amount,
+        ReadOnlySpan<float> coverage)
+    {
+        this.BlendFunction(destination, background, source, amount);
+
+        for (int i = 0; i < destination.Length; i++)
+        {
+            destination[i] = PorterDuffFunctions.BlendWithCoverage(background[i], destination[i], Numerics.Clamp(coverage[i], 0, 1F));
+        }
+    }
+
+    /// <summary>
+    /// Blend a row against a constant source color with per-pixel coverage.
+    /// </summary>
+    /// <param name="destination">destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source color vector</param>
+    /// <param name="amount">
+    /// A value between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    protected virtual void BlendWithCoverageFunction(
+        Span<Vector4> destination,
+        ReadOnlySpan<Vector4> background,
+        Vector4 source,
+        float amount,
+        ReadOnlySpan<float> coverage)
+    {
+        this.BlendFunction(destination, background, source, amount);
+
+        for (int i = 0; i < destination.Length; i++)
+        {
+            destination[i] = PorterDuffFunctions.BlendWithCoverage(background[i], destination[i], Numerics.Clamp(coverage[i], 0, 1F));
+        }
+    }
+
+    /// <summary>
+    /// Blend 2 rows together with per-pixel coverage.
+    /// </summary>
+    /// <param name="destination">destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source span</param>
+    /// <param name="amount">
+    /// A span with values between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    protected virtual void BlendWithCoverageFunction(
+        Span<Vector4> destination,
+        ReadOnlySpan<Vector4> background,
+        ReadOnlySpan<Vector4> source,
+        ReadOnlySpan<float> amount,
+        ReadOnlySpan<float> coverage)
+    {
+        this.BlendFunction(destination, background, source, amount);
+
+        for (int i = 0; i < destination.Length; i++)
+        {
+            destination[i] = PorterDuffFunctions.BlendWithCoverage(background[i], destination[i], Numerics.Clamp(coverage[i], 0, 1F));
+        }
+    }
+
+    /// <summary>
+    /// Blend a row against a constant source color with per-pixel coverage.
+    /// </summary>
+    /// <param name="destination">destination span</param>
+    /// <param name="background">the background span</param>
+    /// <param name="source">the source color vector</param>
+    /// <param name="amount">
+    /// A span with values between 0 and 1 indicating the weight of the second source vector.
+    /// At amount = 0, "background" is returned, at amount = 1, "source" is returned.
+    /// </param>
+    /// <param name="coverage">A span with coverage values between 0 and 1.</param>
+    protected virtual void BlendWithCoverageFunction(
+        Span<Vector4> destination,
+        ReadOnlySpan<Vector4> background,
+        Vector4 source,
+        ReadOnlySpan<float> amount,
+        ReadOnlySpan<float> coverage)
+    {
+        this.BlendFunction(destination, background, source, amount);
+
+        for (int i = 0; i < destination.Length; i++)
+        {
+            destination[i] = PorterDuffFunctions.BlendWithCoverage(background[i], destination[i], Numerics.Clamp(coverage[i], 0, 1F));
+        }
+    }
 }
