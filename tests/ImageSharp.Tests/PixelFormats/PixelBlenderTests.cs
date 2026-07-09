@@ -328,6 +328,214 @@ public class PixelBlenderTests
         Assert.Equal(source[1], destination[1]);
     }
 
+    [Fact]
+    public void BlendWithCoverage_WithConstantSourceAndSingleAmount()
+    {
+        PixelBlender<Rgba32> blender = new DefaultPixelBlenders<Rgba32>.NormalSrc();
+        Rgba32[] destination = new Rgba32[3];
+        Rgba32[] background =
+        [
+            new(255, 0, 0),
+            new(255, 0, 0),
+            new(255, 0, 0)
+        ];
+
+        Rgba32 source = new(0, 0, 255);
+        float[] coverage = [0F, .5F, 1F];
+
+        blender.BlendWithCoverage(Configuration.Default, destination, background, source, 1F, coverage);
+
+        Assert.Equal(background[0], destination[0]);
+        Assert.Equal(new Rgba32(128, 0, 128), destination[1]);
+        Assert.Equal(source, destination[2]);
+    }
+
+    [Fact]
+    public void BlendWithCoverage_WithConstantSourceSingleAmountAndWorkingBuffer()
+    {
+        PixelBlender<Rgba32> blender = new DefaultPixelBlenders<Rgba32>.NormalSrc();
+        Rgba32[] destination = new Rgba32[3];
+        Rgba32[] background =
+        [
+            new(255, 0, 0),
+            new(255, 0, 0),
+            new(255, 0, 0)
+        ];
+
+        Rgba32 source = new(0, 0, 255);
+        float[] coverage = [0F, .5F, 1F];
+        Vector4[] workingBuffer = new Vector4[destination.Length * 2];
+
+        blender.BlendWithCoverage(Configuration.Default, destination, background, source, 1F, coverage, workingBuffer);
+
+        Assert.Equal(background[0], destination[0]);
+        Assert.Equal(new Rgba32(128, 0, 128), destination[1]);
+        Assert.Equal(source, destination[2]);
+    }
+
+    [Fact]
+    public void BlendWithCoverage_WithSourceSpanAndSingleAmount()
+    {
+        PixelBlender<Rgba32> blender = new DefaultPixelBlenders<Rgba32>.NormalSrc();
+        Rgba32[] destination = new Rgba32[3];
+        Rgba32[] background =
+        [
+            new(255, 0, 0),
+            new(0, 255, 0),
+            new(0, 0, 255)
+        ];
+
+        Rgba32[] source =
+        [
+            new(0, 0, 255),
+            new(255, 0, 0),
+            new(0, 255, 0)
+        ];
+
+        float[] coverage = [0F, .5F, 1F];
+
+        blender.BlendWithCoverage<Rgba32>(Configuration.Default, destination, background, source, 1F, coverage);
+
+        Assert.Equal(background[0], destination[0]);
+        Assert.Equal(new Rgba32(128, 128, 0), destination[1]);
+        Assert.Equal(source[2], destination[2]);
+    }
+
+    [Fact]
+    public void BlendWithCoverage_WithSourceSpanSingleAmountAndWorkingBuffer()
+    {
+        PixelBlender<Rgba32> blender = new DefaultPixelBlenders<Rgba32>.NormalSrc();
+        Rgba32[] destination = new Rgba32[3];
+        Rgba32[] background =
+        [
+            new(255, 0, 0),
+            new(0, 255, 0),
+            new(0, 0, 255)
+        ];
+
+        Rgba32[] source =
+        [
+            new(0, 0, 255),
+            new(255, 0, 0),
+            new(0, 255, 0)
+        ];
+
+        float[] coverage = [0F, .5F, 1F];
+        Vector4[] workingBuffer = new Vector4[destination.Length * 3];
+
+        blender.BlendWithCoverage<Rgba32>(Configuration.Default, destination, background, source, 1F, coverage, workingBuffer);
+
+        Assert.Equal(background[0], destination[0]);
+        Assert.Equal(new Rgba32(128, 128, 0), destination[1]);
+        Assert.Equal(source[2], destination[2]);
+    }
+
+    [Fact]
+    public void BlendWithCoverage_WithConstantSourceAndAmountSpan()
+    {
+        PixelBlender<Rgba32> blender = new DefaultPixelBlenders<Rgba32>.NormalSrc();
+        Rgba32[] destination = new Rgba32[3];
+        Rgba32[] background =
+        [
+            new(255, 0, 0),
+            new(255, 0, 0),
+            new(255, 0, 0)
+        ];
+
+        Rgba32 source = new(0, 0, 255);
+        float[] amount = [1F, 1F, 1F];
+        float[] coverage = [0F, .5F, 1F];
+
+        blender.BlendWithCoverage(Configuration.Default, destination, background, source, amount, coverage);
+
+        Assert.Equal(background[0], destination[0]);
+        Assert.Equal(new Rgba32(128, 0, 128), destination[1]);
+        Assert.Equal(source, destination[2]);
+    }
+
+    [Fact]
+    public void BlendWithCoverage_WithConstantSourceAmountSpanAndWorkingBuffer()
+    {
+        PixelBlender<Rgba32> blender = new DefaultPixelBlenders<Rgba32>.NormalSrc();
+        Rgba32[] destination = new Rgba32[3];
+        Rgba32[] background =
+        [
+            new(255, 0, 0),
+            new(255, 0, 0),
+            new(255, 0, 0)
+        ];
+
+        Rgba32 source = new(0, 0, 255);
+        float[] amount = [1F, 1F, 1F];
+        float[] coverage = [0F, .5F, 1F];
+        Vector4[] workingBuffer = new Vector4[destination.Length * 2];
+
+        blender.BlendWithCoverage(Configuration.Default, destination, background, source, amount, coverage, workingBuffer);
+
+        Assert.Equal(background[0], destination[0]);
+        Assert.Equal(new Rgba32(128, 0, 128), destination[1]);
+        Assert.Equal(source, destination[2]);
+    }
+
+    [Fact]
+    public void BlendWithCoverage_WithSourceSpanAndAmountSpan()
+    {
+        PixelBlender<Rgba32> blender = new DefaultPixelBlenders<Rgba32>.NormalSrc();
+        Rgba32[] destination = new Rgba32[3];
+        Rgba32[] background =
+        [
+            new(255, 0, 0),
+            new(0, 255, 0),
+            new(0, 0, 255)
+        ];
+
+        Rgba32[] source =
+        [
+            new(0, 0, 255),
+            new(255, 0, 0),
+            new(0, 255, 0)
+        ];
+
+        float[] amount = [1F, 1F, 1F];
+        float[] coverage = [0F, .5F, 1F];
+
+        blender.BlendWithCoverage<Rgba32>(Configuration.Default, destination, background, source, amount, coverage);
+
+        Assert.Equal(background[0], destination[0]);
+        Assert.Equal(new Rgba32(128, 128, 0), destination[1]);
+        Assert.Equal(source[2], destination[2]);
+    }
+
+    [Fact]
+    public void BlendWithCoverage_WithSourceSpanAmountSpanAndWorkingBuffer()
+    {
+        PixelBlender<Rgba32> blender = new DefaultPixelBlenders<Rgba32>.NormalSrc();
+        Rgba32[] destination = new Rgba32[3];
+        Rgba32[] background =
+        [
+            new(255, 0, 0),
+            new(0, 255, 0),
+            new(0, 0, 255)
+        ];
+
+        Rgba32[] source =
+        [
+            new(0, 0, 255),
+            new(255, 0, 0),
+            new(0, 255, 0)
+        ];
+
+        float[] amount = [1F, 1F, 1F];
+        float[] coverage = [0F, .5F, 1F];
+        Vector4[] workingBuffer = new Vector4[destination.Length * 3];
+
+        blender.BlendWithCoverage<Rgba32>(Configuration.Default, destination, background, source, amount, coverage, workingBuffer);
+
+        Assert.Equal(background[0], destination[0]);
+        Assert.Equal(new Rgba32(128, 128, 0), destination[1]);
+        Assert.Equal(source[2], destination[2]);
+    }
+
     public static TheoryData<Rgba32, Rgba32, float, PixelColorBlendingMode, Rgba32> ColorBlendingExpectedResults = new()
     {
         { Color.MistyRose.ToPixel<Rgba32>(), Color.MidnightBlue.ToPixel<Rgba32>(), 1, PixelColorBlendingMode.Normal, Color.MidnightBlue.ToPixel<Rgba32>() },
@@ -421,6 +629,7 @@ public class PixelBlenderTests
         Rgba32 background = Color.MistyRose.ToPixel<Rgba32>();
         Rgba32 source = Color.MidnightBlue.ToPixel<Rgba32>();
         float[] amount = [1F, 1F, 1F, 1F];
+        float[] coverage = [1F, 1F, 1F, 1F];
 
         Rgba32 expected = blender.Blend(background, source, 1F);
 
@@ -440,6 +649,18 @@ public class PixelBlenderTests
         Assert.All(destination, x => Assert.Equal(expected, x));
 
         blender.Blend(Configuration.Default, destination, backgroundSpan, source, amount, constantSourceBuffer);
+        Assert.All(destination, x => Assert.Equal(expected, x));
+
+        blender.BlendWithCoverage<Rgba32>(Configuration.Default, destination, backgroundSpan, sourceSpan, 1F, coverage, sourceSpanBuffer);
+        Assert.All(destination, x => Assert.Equal(expected, x));
+
+        blender.BlendWithCoverage(Configuration.Default, destination, backgroundSpan, source, 1F, coverage, constantSourceBuffer);
+        Assert.All(destination, x => Assert.Equal(expected, x));
+
+        blender.BlendWithCoverage(Configuration.Default, destination, backgroundSpan, sourceSpan, amount, coverage, sourceSpanBuffer);
+        Assert.All(destination, x => Assert.Equal(expected, x));
+
+        blender.BlendWithCoverage(Configuration.Default, destination, backgroundSpan, source, amount, coverage, constantSourceBuffer);
         Assert.All(destination, x => Assert.Equal(expected, x));
     }
 }

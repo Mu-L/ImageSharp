@@ -152,6 +152,12 @@ using SixLabors.ImageSharp.PixelFormats.Utils;
            {
                removeTheseModifiers += " | PixelConversionModifiers.Premultiply";
            }
+
+           if (hasAlpha)
+           {
+               GenerateRgba32Compatible32BitVector4ConversionMethods(pixelType, removeTheseModifiers);
+               return;
+           }
 #>
 
         /// <inheritdoc />
@@ -162,6 +168,45 @@ using SixLabors.ImageSharp.PixelFormats.Utils;
             PixelConversionModifiers modifiers)
         {
             Vector4Converters.RgbaCompatible.FromVector4(configuration, this, sourceVectors, destination, modifiers.Remove(<#=removeTheseModifiers#>));
+        }
+
+        /// <inheritdoc />
+        public override void ToVector4(
+            Configuration configuration,
+            ReadOnlySpan<<#=pixelType#>> source,
+            Span<Vector4> destination,
+            PixelConversionModifiers modifiers)
+        {
+            Vector4Converters.RgbaCompatible.ToVector4(configuration, this, source, destination, modifiers.Remove(<#=removeTheseModifiers#>));
+        }
+<#+
+    }
+
+    void GenerateRgba32Compatible32BitVector4ConversionMethods(string pixelType, string removeTheseModifiers)
+    {
+#>
+
+        /// <inheritdoc />
+        public override void FromVector4Destructive(
+            Configuration configuration,
+            Span<Vector4> sourceVectors,
+            Span<<#=pixelType#>> destination,
+            PixelConversionModifiers modifiers)
+        {
+            Guard.DestinationShouldNotBeTooShort(sourceVectors, destination, nameof(destination));
+
+            destination = destination[..sourceVectors.Length];
+            Vector4Converters.ApplyBackwardConversionModifiers(sourceVectors, modifiers.Remove(<#=removeTheseModifiers#>));
+
+            Span<byte> destinationBytes = MemoryMarshal.Cast<<#=pixelType#>, byte>(destination);
+
+            // The SIMD saturating conversion produces RGBA byte order. Reusing the destination
+            // buffer and shuffling it in place avoids the row-sized Rgba32 temporary used by
+            // the generic Rgba-compatible path for non-Rgba32 formats.
+            SimdUtils.NormalizedFloatToByteSaturate(
+                MemoryMarshal.Cast<Vector4, float>(sourceVectors),
+                destinationBytes);
+            PixelConverter.FromRgba32.To<#=pixelType#>(destinationBytes, destinationBytes);
         }
 
         /// <inheritdoc />
