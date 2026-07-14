@@ -60,6 +60,19 @@ internal static class Vector512_
         => Avx512F.ConvertToVector512Int32(vector);
 
     /// <summary>
+    /// Converts all values in <paramref name="vector"/> to signed 32-bit integers, rounding midpoint values away from zero.
+    /// </summary>
+    /// <param name="vector">The values to convert.</param>
+    /// <returns>The converted integer values.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector512<int> ConvertToInt32RoundAwayFromZero(Vector512<float> vector)
+    {
+        // The x86 conversion truncates, so adding one half with each lane's sign implements round-to-nearest with midpoint values away from zero.
+        Vector512<float> half = Vector512.Create(.5F) | (vector & Vector512.Create(-0F));
+        return Avx512F.ConvertToVector512Int32WithTruncation(vector + half);
+    }
+
+    /// <summary>
     /// Rounds all values in <paramref name="vector"/> to the nearest integer
     /// following <see cref="MidpointRounding.ToEven"/> semantics.
     /// </summary>

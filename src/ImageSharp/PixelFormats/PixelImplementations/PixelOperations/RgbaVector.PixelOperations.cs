@@ -25,7 +25,10 @@ public partial struct RgbaVector
         {
             Span<Vector4> destinationVectors = MemoryMarshal.Cast<RgbaVector, Vector4>(destinationPixels);
 
-            PixelOperations<TSourcePixel>.Instance.ToVector4(configuration, sourcePixels, destinationVectors, PixelConversionModifiers.Scale);
+            PixelOperations<TSourcePixel>.Instance.ToUnassociatedScaledVector4(configuration, sourcePixels, destinationVectors);
+
+            // RgbaVector.FromScaledVector4 clamps scaled input, so the optimized bulk path must preserve that behavior after unassociating.
+            Numerics.Clamp(MemoryMarshal.Cast<Vector4, float>(destinationVectors), 0F, 1F);
         }
 
         /// <inheritdoc />

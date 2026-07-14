@@ -74,6 +74,26 @@ internal static class Vector256_
     }
 
     /// <summary>
+    /// Converts all values in <paramref name="vector"/> to signed 32-bit integers, rounding midpoint values away from zero.
+    /// </summary>
+    /// <param name="vector">The values to convert.</param>
+    /// <returns>The converted integer values.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector256<int> ConvertToInt32RoundAwayFromZero(Vector256<float> vector)
+    {
+        if (Avx.IsSupported)
+        {
+            // The x86 conversion truncates, so adding one half with each lane's sign implements round-to-nearest with midpoint values away from zero.
+            Vector256<float> x86Adjustment = Vector256.Create(.5F) | (vector & Vector256.Create(-0F));
+            return Avx.ConvertToVector256Int32WithTruncation(vector + x86Adjustment);
+        }
+
+        Vector256<float> sign = vector & Vector256.Create(-0F);
+        Vector256<float> fallbackAdjustment = Vector256.Create(.5F) | sign;
+        return Vector256.ConvertToInt32(vector + fallbackAdjustment);
+    }
+
+    /// <summary>
     /// Rounds all values in <paramref name="vector"/> to the nearest integer
     /// following <see cref="MidpointRounding.ToEven"/> semantics.
     /// </summary>

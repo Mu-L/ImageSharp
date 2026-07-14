@@ -834,6 +834,19 @@ internal static partial class SimdUtils
         internal static void NormalizedFloatToByteSaturateReduce(
             ref ReadOnlySpan<float> source,
             ref Span<byte> destination)
+            => FloatToByteSaturateReduce(ref source, ref destination, byte.MaxValue);
+
+        /// <summary>
+        /// Converts as many scaled floating-point values as possible to bytes and retains the unconverted remainder.
+        /// </summary>
+        /// <param name="source">The source buffer.</param>
+        /// <param name="destination">The destination buffer.</param>
+        /// <param name="scaleFactor">The factor applied before conversion.</param>
+        [MethodImpl(InliningOptions.ShortMethod)]
+        internal static void FloatToByteSaturateReduce(
+            ref ReadOnlySpan<float> source,
+            ref Span<byte> destination,
+            float scaleFactor)
         {
             DebugGuard.IsTrue(source.Length == destination.Length, nameof(source), "Input spans must be of same length!");
 
@@ -858,9 +871,10 @@ internal static partial class SimdUtils
 
                 if (adjustedCount > 0)
                 {
-                    NormalizedFloatToByteSaturate(
+                    FloatToByteSaturate(
                         source[..adjustedCount],
-                        destination[..adjustedCount]);
+                        destination[..adjustedCount],
+                        scaleFactor);
 
                     source = source[adjustedCount..];
                     destination = destination[adjustedCount..];
@@ -880,6 +894,18 @@ internal static partial class SimdUtils
         internal static void NormalizedFloatToByteSaturate(
             ReadOnlySpan<float> source,
             Span<byte> destination)
+            => FloatToByteSaturate(source, destination, byte.MaxValue);
+
+        /// <summary>
+        /// Converts scaled floating-point values to bytes using saturating round-to-nearest with midpoint values away from zero.
+        /// </summary>
+        /// <param name="source">The source buffer.</param>
+        /// <param name="destination">The destination buffer.</param>
+        /// <param name="scaleFactor">The factor applied before conversion.</param>
+        internal static void FloatToByteSaturate(
+            ReadOnlySpan<float> source,
+            Span<byte> destination,
+            float scaleFactor)
         {
             if (Vector512.IsHardwareAccelerated && Avx512BW.IsSupported)
             {
@@ -890,7 +916,7 @@ internal static partial class SimdUtils
                 ref Vector512<float> sourceBase = ref Unsafe.As<float, Vector512<float>>(ref MemoryMarshal.GetReference(source));
                 ref Vector512<byte> destinationBase = ref Unsafe.As<byte, Vector512<byte>>(ref MemoryMarshal.GetReference(destination));
 
-                Vector512<float> scale = Vector512.Create((float)byte.MaxValue);
+                Vector512<float> scale = Vector512.Create(scaleFactor);
                 Vector512<int> mask = PermuteMaskDeinterleave16x32();
 
                 for (nuint i = 0; i < n; i++)
@@ -902,10 +928,10 @@ internal static partial class SimdUtils
                     Vector512<float> f2 = scale * Unsafe.Add(ref s, 2);
                     Vector512<float> f3 = scale * Unsafe.Add(ref s, 3);
 
-                    Vector512<int> w0 = Vector512_.ConvertToInt32RoundToEven(f0);
-                    Vector512<int> w1 = Vector512_.ConvertToInt32RoundToEven(f1);
-                    Vector512<int> w2 = Vector512_.ConvertToInt32RoundToEven(f2);
-                    Vector512<int> w3 = Vector512_.ConvertToInt32RoundToEven(f3);
+                    Vector512<int> w0 = Vector512_.ConvertToInt32RoundAwayFromZero(f0);
+                    Vector512<int> w1 = Vector512_.ConvertToInt32RoundAwayFromZero(f1);
+                    Vector512<int> w2 = Vector512_.ConvertToInt32RoundAwayFromZero(f2);
+                    Vector512<int> w3 = Vector512_.ConvertToInt32RoundAwayFromZero(f3);
 
                     Vector512<short> u0 = Avx512BW.PackSignedSaturate(w0, w1);
                     Vector512<short> u1 = Avx512BW.PackSignedSaturate(w2, w3);
@@ -924,7 +950,7 @@ internal static partial class SimdUtils
                 ref Vector256<float> sourceBase = ref Unsafe.As<float, Vector256<float>>(ref MemoryMarshal.GetReference(source));
                 ref Vector256<byte> destinationBase = ref Unsafe.As<byte, Vector256<byte>>(ref MemoryMarshal.GetReference(destination));
 
-                Vector256<float> scale = Vector256.Create((float)byte.MaxValue);
+                Vector256<float> scale = Vector256.Create(scaleFactor);
                 Vector256<int> mask = PermuteMaskDeinterleave8x32();
 
                 for (nuint i = 0; i < n; i++)
@@ -936,10 +962,10 @@ internal static partial class SimdUtils
                     Vector256<float> f2 = scale * Unsafe.Add(ref s, 2);
                     Vector256<float> f3 = scale * Unsafe.Add(ref s, 3);
 
-                    Vector256<int> w0 = Vector256_.ConvertToInt32RoundToEven(f0);
-                    Vector256<int> w1 = Vector256_.ConvertToInt32RoundToEven(f1);
-                    Vector256<int> w2 = Vector256_.ConvertToInt32RoundToEven(f2);
-                    Vector256<int> w3 = Vector256_.ConvertToInt32RoundToEven(f3);
+                    Vector256<int> w0 = Vector256_.ConvertToInt32RoundAwayFromZero(f0);
+                    Vector256<int> w1 = Vector256_.ConvertToInt32RoundAwayFromZero(f1);
+                    Vector256<int> w2 = Vector256_.ConvertToInt32RoundAwayFromZero(f2);
+                    Vector256<int> w3 = Vector256_.ConvertToInt32RoundAwayFromZero(f3);
 
                     Vector256<short> u0 = Avx2.PackSignedSaturate(w0, w1);
                     Vector256<short> u1 = Avx2.PackSignedSaturate(w2, w3);
@@ -959,7 +985,7 @@ internal static partial class SimdUtils
                 ref Vector128<float> sourceBase = ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetReference(source));
                 ref Vector128<byte> destinationBase = ref Unsafe.As<byte, Vector128<byte>>(ref MemoryMarshal.GetReference(destination));
 
-                Vector128<float> scale = Vector128.Create((float)byte.MaxValue);
+                Vector128<float> scale = Vector128.Create(scaleFactor);
                 Vector128<int> min = Vector128<int>.Zero;
                 Vector128<int> max = Vector128.Create((int)byte.MaxValue);
 
@@ -972,10 +998,10 @@ internal static partial class SimdUtils
                     Vector128<float> f2 = scale * Unsafe.Add(ref s, 2);
                     Vector128<float> f3 = scale * Unsafe.Add(ref s, 3);
 
-                    Vector128<int> w0 = Vector128_.ConvertToInt32RoundToEven(f0);
-                    Vector128<int> w1 = Vector128_.ConvertToInt32RoundToEven(f1);
-                    Vector128<int> w2 = Vector128_.ConvertToInt32RoundToEven(f2);
-                    Vector128<int> w3 = Vector128_.ConvertToInt32RoundToEven(f3);
+                    Vector128<int> w0 = Vector128_.ConvertToInt32RoundAwayFromZero(f0);
+                    Vector128<int> w1 = Vector128_.ConvertToInt32RoundAwayFromZero(f1);
+                    Vector128<int> w2 = Vector128_.ConvertToInt32RoundAwayFromZero(f2);
+                    Vector128<int> w3 = Vector128_.ConvertToInt32RoundAwayFromZero(f3);
 
                     w0 = Vector128_.Clamp(w0, min, max);
                     w1 = Vector128_.Clamp(w1, min, max);

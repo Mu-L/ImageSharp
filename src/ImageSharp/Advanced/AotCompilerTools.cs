@@ -81,10 +81,13 @@ internal static class AotCompilerTools
 
             Seed<A8>();
             Seed<Argb32>();
+            Seed<Argb32P>();
             Seed<Abgr32>();
+            Seed<Abgr32P>();
             Seed<Bgr24>();
             Seed<Bgr565>();
             Seed<Bgra32>();
+            Seed<Bgra32P>();
             Seed<Bgra4444>();
             Seed<Bgra5551>();
             Seed<Byte4>();
@@ -95,8 +98,10 @@ internal static class AotCompilerTools
             Seed<HalfSingle>();
             Seed<HalfVector2>();
             Seed<HalfVector4>();
+            Seed<HalfVector4P>();
             Seed<NormalizedByte2>();
             Seed<NormalizedByte4>();
+            Seed<NormalizedByte4P>();
             Seed<NormalizedShort2>();
             Seed<NormalizedShort4>();
             Seed<Rg32>();
@@ -104,6 +109,7 @@ internal static class AotCompilerTools
             Seed<Rgb48>();
             Seed<Rgba1010102>();
             Seed<Rgba32>();
+            Seed<Rgba32P>();
             Seed<Rgba64>();
             Seed<RgbaVector>();
             Seed<Short2>();
@@ -158,10 +164,13 @@ internal static class AotCompilerTools
         Image<TPixel> img = default;
         img.CloneAs<A8>(default);
         img.CloneAs<Argb32>(default);
+        img.CloneAs<Argb32P>(default);
         img.CloneAs<Abgr32>(default);
+        img.CloneAs<Abgr32P>(default);
         img.CloneAs<Bgr24>(default);
         img.CloneAs<Bgr565>(default);
         img.CloneAs<Bgra32>(default);
+        img.CloneAs<Bgra32P>(default);
         img.CloneAs<Bgra4444>(default);
         img.CloneAs<Bgra5551>(default);
         img.CloneAs<Byte4>(default);
@@ -172,8 +181,10 @@ internal static class AotCompilerTools
         img.CloneAs<HalfSingle>(default);
         img.CloneAs<HalfVector2>(default);
         img.CloneAs<HalfVector4>(default);
+        img.CloneAs<HalfVector4P>(default);
         img.CloneAs<NormalizedByte2>(default);
         img.CloneAs<NormalizedByte4>(default);
+        img.CloneAs<NormalizedByte4P>(default);
         img.CloneAs<NormalizedShort2>(default);
         img.CloneAs<NormalizedShort4>(default);
         img.CloneAs<Rg32>(default);
@@ -181,6 +192,7 @@ internal static class AotCompilerTools
         img.CloneAs<Rgb48>(default);
         img.CloneAs<Rgba1010102>(default);
         img.CloneAs<Rgba32>(default);
+        img.CloneAs<Rgba32P>(default);
         img.CloneAs<Rgba64>(default);
         img.CloneAs<RgbaVector>(default);
         img.CloneAs<Short2>(default);

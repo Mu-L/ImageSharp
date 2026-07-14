@@ -148,11 +148,11 @@ public partial class SimdUtilsTests
     {
         byte[] source = new Random(count).GenerateRandomByteArray(count);
         float[] result = new float[count];
-        float[] expected = source.Select(b => b / 255f).ToArray();
+        float[] expected = source.Select(b => b * (1F / byte.MaxValue)).ToArray();
 
         convert(source, result);
 
-        Assert.Equal(expected, result, new ApproximateFloatComparer(1e-5f));
+        Assert.Equal(expected, result);
     }
 
     [Theory]
@@ -191,6 +191,45 @@ public partial class SimdUtilsTests
                     i + 42);
             }
         }
+    }
+
+    [Fact]
+    public void BulkConvertNormalizedFloatToByteRoundsMidpointsAwayFromZero()
+    {
+        float[] midpointValues = Enumerable.Range(0, byte.MaxValue).Select(x => (x + 0.5F) / byte.MaxValue).ToArray();
+        float[] source = new float[1024];
+        byte[] expected = new byte[source.Length];
+        byte[] actual = new byte[source.Length];
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            int value = i % midpointValues.Length;
+            source[i] = midpointValues[value];
+            expected[i] = (byte)(value + 1);
+        }
+
+        SimdUtils.NormalizedFloatToByteSaturate(source, actual);
+
+        Assert.Equal(expected, actual);
+    }
+
+    [Fact]
+    public void BulkConvertFloatToByteRoundsMidpointsAwayFromZeroAndClampsOverflows()
+    {
+        float[] source = new float[1027];
+        byte[] expected = new byte[source.Length];
+        byte[] actual = new byte[source.Length];
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            float value = (i % 258) - .5F;
+            source[i] = value;
+            expected[i] = (byte)Math.Min(byte.MaxValue, Math.Max(0, value + .5F));
+        }
+
+        SimdUtils.FloatToByteSaturate(source, actual);
+
+        Assert.Equal(expected, actual);
     }
 
     [Theory]

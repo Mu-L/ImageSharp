@@ -338,7 +338,9 @@ internal static partial class PorterDuffFunctions
         Vector4 sourceAlpha = Numerics.PermuteW(source);
         Vector4 backdropPremultiplied = Numerics.WithW(backdrop * backdropAlpha, backdropAlpha);
         Vector4 sourcePremultiplied = Numerics.WithW(source * sourceAlpha, sourceAlpha);
-        Vector4 result = backdropPremultiplied + ((sourcePremultiplied - backdropPremultiplied) * coverage);
+
+        // Use the same fused operation as the wider paths so exact midpoints cannot change across vector widths.
+        Vector4 result = Vector128_.MultiplyAdd(backdropPremultiplied.AsVector128(), (sourcePremultiplied - backdropPremultiplied).AsVector128(), Vector128.Create(coverage)).AsVector4();
 
         Numerics.UnPremultiply(ref result);
         return result;

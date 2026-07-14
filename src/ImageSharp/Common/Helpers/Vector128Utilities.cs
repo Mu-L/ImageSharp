@@ -308,6 +308,31 @@ internal static class Vector128_
     }
 
     /// <summary>
+    /// Converts all values in <paramref name="vector"/> to signed 32-bit integers, rounding midpoint values away from zero.
+    /// </summary>
+    /// <param name="vector">The values to convert.</param>
+    /// <returns>The converted integer values.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector128<int> ConvertToInt32RoundAwayFromZero(Vector128<float> vector)
+    {
+        if (Sse2.IsSupported)
+        {
+            // The x86 conversion truncates, so adding one half with each lane's sign implements round-to-nearest with midpoint values away from zero.
+            Vector128<float> x86Adjustment = Vector128.Create(.5F) | (vector & Vector128.Create(-0F));
+            return Sse2.ConvertToVector128Int32WithTruncation(vector + x86Adjustment);
+        }
+
+        if (AdvSimd.IsSupported)
+        {
+            return AdvSimd.ConvertToInt32RoundAwayFromZero(vector);
+        }
+
+        Vector128<float> sign = vector & Vector128.Create(-0F);
+        Vector128<float> fallbackAdjustment = Vector128.Create(.5F) | sign;
+        return Vector128.ConvertToInt32(vector + fallbackAdjustment);
+    }
+
+    /// <summary>
     /// Rounds all values in <paramref name="vector"/> to the nearest integer
     /// following <see cref="MidpointRounding.ToEven"/> semantics.
     /// </summary>

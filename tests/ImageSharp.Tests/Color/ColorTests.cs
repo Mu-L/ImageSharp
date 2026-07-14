@@ -18,6 +18,28 @@ public partial class ColorTests
         Assert.Equal(expected, c2.ToPixel<Rgba32>());
     }
 
+    [Fact]
+    public void WithAlphaPreservesAssociatedRepresentation()
+    {
+        Color color = Color.FromPixel(new Rgba32P(64, 32, 16, 128));
+
+        // Act:
+        Color actual = color.WithAlpha(64F / 255F);
+
+        // Assert:
+        Assert.Equal(PixelAlphaRepresentation.Associated, actual.AlphaRepresentation);
+        Assert.Equal(new Rgba32P(32, 16, 8, 64), actual.ToPixel<Rgba32P>());
+        Assert.Equal(new Rgba32(128, 64, 32, 64), actual.ToPixel<Rgba32>());
+    }
+
+    [Fact]
+    public void ToHexConvertsAssociatedRepresentation()
+    {
+        Color color = Color.FromPixel(new Rgba32P(64, 32, 16, 128));
+
+        Assert.Equal("80402080", color.ToHex());
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

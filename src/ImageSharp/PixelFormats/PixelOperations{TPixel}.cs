@@ -27,6 +27,59 @@ public partial class PixelOperations<TPixel>
 #pragma warning restore CA1000 // Do not declare static members on generic types
 
     /// <summary>
+    /// Converts a pixel to the unassociated scaled vector representation used by color operations.
+    /// </summary>
+    /// <param name="source">The source pixel.</param>
+    /// <returns>The unassociated scaled vector.</returns>
+    internal virtual Vector4 ToUnassociatedScaledVector4(TPixel source) => source.ToScaledVector4();
+
+    /// <summary>
+    /// Converts an unassociated scaled vector to a pixel.
+    /// </summary>
+    /// <param name="source">The unassociated scaled vector.</param>
+    /// <returns>The converted pixel.</returns>
+    internal virtual TPixel FromUnassociatedScaledVector4(Vector4 source) => TPixel.FromScaledVector4(source);
+
+    /// <summary>
+    /// Converts pixels to the unassociated scaled vector representation used by color operations.
+    /// </summary>
+    /// <param name="configuration">The configuration.</param>
+    /// <param name="source">The source pixels.</param>
+    /// <param name="destination">The destination vectors.</param>
+    internal virtual void ToUnassociatedScaledVector4(
+        Configuration configuration,
+        ReadOnlySpan<TPixel> source,
+        Span<Vector4> destination)
+        => this.ToVector4(configuration, source, destination, PixelConversionModifiers.Scale);
+
+    /// <summary>
+    /// Converts pixels to associated scaled vectors.
+    /// </summary>
+    /// <param name="configuration">The configuration.</param>
+    /// <param name="source">The source pixels.</param>
+    /// <param name="destination">The destination vectors.</param>
+    internal virtual void ToAssociatedScaledVector4(
+        Configuration configuration,
+        ReadOnlySpan<TPixel> source,
+        Span<Vector4> destination)
+    {
+        this.ToVector4(configuration, source, destination, PixelConversionModifiers.Scale);
+        Numerics.Premultiply(destination[..source.Length]);
+    }
+
+    /// <summary>
+    /// Converts unassociated scaled vectors to pixels.
+    /// </summary>
+    /// <param name="configuration">The configuration.</param>
+    /// <param name="source">The source vectors.</param>
+    /// <param name="destination">The destination pixels.</param>
+    internal virtual void FromUnassociatedScaledVector4(
+        Configuration configuration,
+        Span<Vector4> source,
+        Span<TPixel> destination)
+        => this.FromVector4Destructive(configuration, source, destination, PixelConversionModifiers.Scale);
+
+    /// <summary>
     /// Gets the pixel type info for the given <typeparamref name="TPixel"/>.
     /// </summary>
     /// <returns>The <see cref="PixelTypeInfo"/>.</returns>
@@ -121,12 +174,13 @@ public partial class PixelOperations<TPixel>
 
         using IMemoryOwner<Vector4> tempVectors = configuration.MemoryAllocator.Allocate<Vector4>(sliceLength);
         Span<Vector4> vectorSpan = tempVectors.GetSpan();
+
         for (int i = 0; i < numberOfSlices; i++)
         {
             int start = i * sliceLength;
             ReadOnlySpan<TSourcePixel> s = source.Slice(start, sliceLength);
             Span<TPixel> d = destination.Slice(start, sliceLength);
-            PixelOperations<TSourcePixel>.Instance.ToVector4(configuration, s, vectorSpan, PixelConversionModifiers.Scale);
+            PixelOperations<TSourcePixel>.Instance.ToUnassociatedScaledVector4(configuration, s, vectorSpan);
             this.FromVector4Destructive(configuration, vectorSpan, d, PixelConversionModifiers.Scale);
         }
 
@@ -137,7 +191,7 @@ public partial class PixelOperations<TPixel>
             ReadOnlySpan<TSourcePixel> s = source[endOfCompleteSlices..];
             Span<TPixel> d = destination[endOfCompleteSlices..];
             vectorSpan = vectorSpan[..remainder];
-            PixelOperations<TSourcePixel>.Instance.ToVector4(configuration, s, vectorSpan, PixelConversionModifiers.Scale);
+            PixelOperations<TSourcePixel>.Instance.ToUnassociatedScaledVector4(configuration, s, vectorSpan);
             this.FromVector4Destructive(configuration, vectorSpan, d, PixelConversionModifiers.Scale);
         }
     }
@@ -158,6 +212,13 @@ public partial class PixelOperations<TPixel>
     {
         Guard.NotNull(configuration, nameof(configuration));
         Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
+
+        if (typeof(TPixel) == typeof(TDestinationPixel))
+        {
+            // An identical destination stores the same representation, including associated alpha, so copying preserves every packed component without a lossy representation round trip.
+            MemoryMarshal.Cast<TPixel, TDestinationPixel>(source).CopyTo(destination);
+            return;
+        }
 
         PixelOperations<TDestinationPixel>.Instance.From(configuration, source, destination);
     }
