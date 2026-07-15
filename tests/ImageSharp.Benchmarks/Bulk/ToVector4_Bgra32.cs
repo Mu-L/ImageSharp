@@ -56,12 +56,12 @@ public class ToVector4_Bgra32P : ToVector4<Bgra32P>
     // AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical cores
     // .NET 8.0.28, X64 RyuJIT x86-64-v4
     //
-    // | Method                      | Count | Mean        | Error      | StdDev   | Ratio | Code Size | Allocated |
-    // |---------------------------- |------ |------------:|-----------:|---------:|------:|----------:|----------:|
-    // | PixelOperations_Base        | 64    |    58.08 ns |  10.122 ns | 0.555 ns |  1.00 |     932 B |         - |
-    // | PixelOperations_Specialized | 64    |    79.63 ns |   9.080 ns | 0.498 ns |  1.37 |   3,688 B |         - |
-    // | PixelOperations_Base        | 256   |   224.99 ns |  46.742 ns | 2.562 ns |  1.00 |     958 B |         - |
-    // | PixelOperations_Specialized | 256   |    99.41 ns |   9.728 ns | 0.533 ns |  0.44 |   3,688 B |         - |
-    // | PixelOperations_Base        | 2048  | 1,745.77 ns | 143.244 ns | 7.852 ns |  1.00 |     958 B |         - |
-    // | PixelOperations_Specialized | 2048  |   293.00 ns |  44.137 ns | 2.419 ns |  0.17 |   3,704 B |         - |
+    // | Method                      | Count | Mean        | Error    | StdDev   | Ratio | RatioSD | Code Size | Allocated |
+    // |---------------------------- |------ |------------:|---------:|---------:|------:|--------:|----------:|----------:|
+    // | PixelOperations_Base        | 64    |    58.05 ns | 3.204 ns | 4.795 ns |  1.01 |    0.11 |     932 B |         - |
+    // | PixelOperations_Specialized | 64    |    84.78 ns | 0.467 ns | 0.669 ns |  1.47 |    0.12 |   3,731 B |         - |
+    // | PixelOperations_Base        | 256   |   208.93 ns | 0.345 ns | 0.484 ns |  1.00 |    0.00 |     958 B |         - |
+    // | PixelOperations_Specialized | 256   |   106.50 ns | 0.280 ns | 0.410 ns |  0.51 |    0.00 |   3,738 B |         - |
+    // | PixelOperations_Base        | 2048  | 1,617.39 ns | 3.380 ns | 4.848 ns |  1.00 |    0.00 |     958 B |         - |
+    // | PixelOperations_Specialized | 2048  |   269.90 ns | 0.666 ns | 0.976 ns |  0.17 |    0.00 |   3,735 B |         - |
 }

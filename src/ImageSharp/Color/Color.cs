@@ -20,45 +20,23 @@ namespace SixLabors.ImageSharp;
 public readonly partial struct Color : IEquatable<Color>
 {
     private readonly Vector4 data;
-    private readonly Vector4 unassociatedData;
     private readonly IPixel? boxedHighPrecisionPixel;
     private readonly bool isAssociated;
+    private readonly bool dataIsAssociated;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="Color"/> struct.
     /// </summary>
     /// <param name="vector">The <see cref="Vector4"/> containing the color information.</param>
-    /// <param name="alphaRepresentation">The alpha representation of <paramref name="vector"/>.</param>
+    /// <param name="alphaRepresentation">The alpha representation exposed by the color.</param>
+    /// <param name="dataAlphaRepresentation">The alpha representation of <paramref name="vector"/>.</param>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Color(Vector4 vector, PixelAlphaRepresentation alphaRepresentation)
-    {
-        Vector4 clamped = Numerics.Clamp(vector, Vector4.Zero, Vector4.One);
-        Vector4 unassociated = clamped;
-
-        if (alphaRepresentation == PixelAlphaRepresentation.Associated)
-        {
-            Numerics.UnPremultiply(ref unassociated);
-        }
-
-        this.data = clamped;
-        this.unassociatedData = unassociated;
-        this.boxedHighPrecisionPixel = null;
-        this.isAssociated = alphaRepresentation == PixelAlphaRepresentation.Associated;
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="Color"/> struct.
-    /// </summary>
-    /// <param name="vector">The <see cref="Vector4"/> containing the color information.</param>
-    /// <param name="unassociatedVector">The unassociated representation of <paramref name="vector"/>.</param>
-    /// <param name="alphaRepresentation">The alpha representation of <paramref name="vector"/>.</param>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private Color(Vector4 vector, Vector4 unassociatedVector, PixelAlphaRepresentation alphaRepresentation)
+    private Color(Vector4 vector, PixelAlphaRepresentation alphaRepresentation, PixelAlphaRepresentation dataAlphaRepresentation)
     {
         this.data = Numerics.Clamp(vector, Vector4.Zero, Vector4.One);
-        this.unassociatedData = Numerics.Clamp(unassociatedVector, Vector4.Zero, Vector4.One);
         this.boxedHighPrecisionPixel = null;
         this.isAssociated = alphaRepresentation == PixelAlphaRepresentation.Associated;
+        this.dataIsAssociated = dataAlphaRepresentation == PixelAlphaRepresentation.Associated;
     }
 
     /// <summary>
@@ -71,8 +49,8 @@ public readonly partial struct Color : IEquatable<Color>
     {
         this.boxedHighPrecisionPixel = pixel;
         this.data = default;
-        this.unassociatedData = default;
         this.isAssociated = alphaRepresentation == PixelAlphaRepresentation.Associated;
+        this.dataIsAssociated = this.isAssociated;
     }
 
     /// <summary>
@@ -118,14 +96,22 @@ public readonly partial struct Color : IEquatable<Color>
         // Avoid boxing in case we can convert to Vector4 safely and efficiently
         PixelTypeInfo info = TPixel.GetPixelTypeInfo();
 
-        if (info.ComponentInfo.HasValue && info.ComponentInfo.Value.GetMaximumComponentPrecision() <= (int)PixelComponentBitDepth.Bit32)
+        if (info.ComponentInfo.HasValue)
         {
-            Vector4 vector = source.ToScaledVector4();
-            Vector4 unassociated = info.AlphaRepresentation == PixelAlphaRepresentation.Associated
-                ? PixelOperations<TPixel>.Instance.ToUnassociatedScaledVector4(source)
-                : vector;
+            int maximumComponentPrecision = info.ComponentInfo.Value.GetMaximumComponentPrecision();
 
-            return new Color(vector, unassociated, info.AlphaRepresentation);
+            if (maximumComponentPrecision <= (int)PixelComponentBitDepth.Bit32)
+            {
+                if (info.AlphaRepresentation == PixelAlphaRepresentation.Associated && maximumComponentPrecision <= (int)PixelComponentBitDepth.Bit8)
+                {
+                    // Associated formats with at most eight bits per component can be canonicalized without loss by their pixel-specific conversion.
+                    // Higher-precision formats retain their associated values because unassociation can lose representable data.
+                    Vector4 vector = PixelOperations<TPixel>.Instance.ToUnassociatedScaledVector4(source);
+                    return new Color(vector, info.AlphaRepresentation, PixelAlphaRepresentation.Unassociated);
+                }
+
+                return new Color(source.ToScaledVector4(), info.AlphaRepresentation, info.AlphaRepresentation);
+            }
         }
 
         return new Color(source, info.AlphaRepresentation);
@@ -137,7 +123,8 @@ public readonly partial struct Color : IEquatable<Color>
     /// <param name="source">The unassociated vector to load the color from.</param>
     /// <returns>The <see cref="Color"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Color FromScaledVector(Vector4 source) => new(source, PixelAlphaRepresentation.Unassociated);
+    public static Color FromScaledVector(Vector4 source)
+        => new(source, PixelAlphaRepresentation.Unassociated, PixelAlphaRepresentation.Unassociated);
 
     /// <summary>
     /// Creates a <see cref="Color"/> from a generic scaled <see cref="Vector4"/> with the specified alpha representation.
@@ -146,7 +133,8 @@ public readonly partial struct Color : IEquatable<Color>
     /// <param name="alphaRepresentation">The alpha representation of <paramref name="source"/>.</param>
     /// <returns>The <see cref="Color"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Color FromScaledVector(Vector4 source, PixelAlphaRepresentation alphaRepresentation) => new(source, alphaRepresentation);
+    public static Color FromScaledVector(Vector4 source, PixelAlphaRepresentation alphaRepresentation)
+        => new(source, alphaRepresentation, alphaRepresentation);
 
     /// <summary>
     /// Bulk converts a span of generic scaled <see cref="Vector4"/> to a span of <see cref="Color"/>.
@@ -190,23 +178,38 @@ public readonly partial struct Color : IEquatable<Color>
         // Avoid boxing in case we can convert to Vector4 safely and efficiently
         PixelTypeInfo info = TPixel.GetPixelTypeInfo();
 
-        if (info.ComponentInfo.HasValue && info.ComponentInfo.Value.GetMaximumComponentPrecision() <= (int)PixelComponentBitDepth.Bit32)
+        if (info.ComponentInfo.HasValue)
         {
-            bool isAssociated = info.AlphaRepresentation == PixelAlphaRepresentation.Associated;
+            int maximumComponentPrecision = info.ComponentInfo.Value.GetMaximumComponentPrecision();
 
-            for (int i = 0; i < source.Length; i++)
+            if (maximumComponentPrecision <= (int)PixelComponentBitDepth.Bit32)
             {
-                Vector4 vector = source[i].ToScaledVector4();
-                Vector4 unassociated = isAssociated ? PixelOperations<TPixel>.Instance.ToUnassociatedScaledVector4(source[i]) : vector;
-                destination[i] = new Color(vector, unassociated, info.AlphaRepresentation);
+                if (info.AlphaRepresentation == PixelAlphaRepresentation.Associated && maximumComponentPrecision <= (int)PixelComponentBitDepth.Bit8)
+                {
+                    // Match the scalar conversion by retaining exact unassociated values from the format-specific operation.
+                    PixelOperations<TPixel> operations = PixelOperations<TPixel>.Instance;
+
+                    for (int i = 0; i < source.Length; i++)
+                    {
+                        Vector4 vector = operations.ToUnassociatedScaledVector4(source[i]);
+                        destination[i] = new Color(vector, info.AlphaRepresentation, PixelAlphaRepresentation.Unassociated);
+                    }
+
+                    return;
+                }
+
+                for (int i = 0; i < source.Length; i++)
+                {
+                    destination[i] = new Color(source[i].ToScaledVector4(), info.AlphaRepresentation, info.AlphaRepresentation);
+                }
+
+                return;
             }
         }
-        else
+
+        for (int i = 0; i < source.Length; i++)
         {
-            for (int i = 0; i < source.Length; i++)
-            {
-                destination[i] = new Color(source[i], info.AlphaRepresentation);
-            }
+            destination[i] = new Color(source[i], info.AlphaRepresentation);
         }
     }
 
@@ -349,26 +352,9 @@ public readonly partial struct Color : IEquatable<Color>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Color WithAlpha(float alpha)
     {
-        Vector4 v = this.ToScaledVector4();
-        float clampedAlpha = Numerics.Clamp(alpha, 0, 1);
-
-        if (this.isAssociated)
-        {
-            Vector4 unassociated = this.boxedHighPrecisionPixel is null ? this.unassociatedData : v;
-
-            if (this.boxedHighPrecisionPixel is not null)
-            {
-                Numerics.UnPremultiply(ref unassociated);
-            }
-
-            unassociated.W = clampedAlpha;
-            Vector4 associated = unassociated;
-            Numerics.Premultiply(ref associated);
-            return new Color(associated, unassociated, PixelAlphaRepresentation.Associated);
-        }
-
-        v.W = clampedAlpha;
-        return FromScaledVector(v, PixelAlphaRepresentation.Unassociated);
+        Vector4 vector = this.ToScaledVector4(PixelAlphaRepresentation.Unassociated);
+        vector.W = Numerics.Clamp(alpha, 0, 1);
+        return new Color(vector, this.AlphaRepresentation, PixelAlphaRepresentation.Unassociated);
     }
 
     /// <summary>
@@ -411,17 +397,22 @@ public readonly partial struct Color : IEquatable<Color>
             return pixel;
         }
 
-        Vector4 vector = this.boxedHighPrecisionPixel is null
-            ? this.isAssociated ? this.unassociatedData : this.data
-            : this.boxedHighPrecisionPixel.ToScaledVector4();
+        Vector4 vector = this.boxedHighPrecisionPixel?.ToScaledVector4() ?? this.data;
+        PixelOperations<TPixel> operations = PixelOperations<TPixel>.Instance;
 
-        if (this.isAssociated && this.boxedHighPrecisionPixel is not null)
+        if (this.dataIsAssociated)
         {
+            if (operations is AssociatedAlphaPixelOperations<TPixel> associatedOperations)
+            {
+                // Preserve associated components directly while allowing the destination to quantize alpha to its own storage grid.
+                return associatedOperations.FromAssociatedScaledVector4(vector);
+            }
+
             Numerics.UnPremultiply(ref vector);
         }
 
-        // Destination pixel operations own association because RGB must use the alpha value representable by that destination format.
-        return PixelOperations<TPixel>.Instance.FromUnassociatedScaledVector4(vector);
+        // Unassociated input lets an associated destination quantize alpha before it multiplies the color components.
+        return operations.FromUnassociatedScaledVector4(vector);
     }
 
     /// <summary>
@@ -434,12 +425,55 @@ public readonly partial struct Color : IEquatable<Color>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public Vector4 ToScaledVector4()
     {
-        if (this.boxedHighPrecisionPixel is null)
+        Vector4 vector = this.boxedHighPrecisionPixel?.ToScaledVector4() ?? this.data;
+
+        if (this.dataIsAssociated == this.isAssociated)
         {
-            return this.data;
+            return vector;
         }
 
-        return this.boxedHighPrecisionPixel.ToScaledVector4();
+        if (this.isAssociated)
+        {
+            Numerics.Premultiply(ref vector);
+        }
+        else
+        {
+            Numerics.UnPremultiply(ref vector);
+        }
+
+        return vector;
+    }
+
+    /// <summary>
+    /// Expands the color into a generic ("scaled") <see cref="Vector4"/> using the specified alpha representation,
+    /// with values scaled and clamped between <value>0</value> and <value>1</value>.
+    /// </summary>
+    /// <param name="alphaRepresentation">
+    /// The alpha representation to apply. <see cref="PixelAlphaRepresentation.Associated"/> returns color components
+    /// multiplied by alpha; other representations return color components independent of alpha.
+    /// </param>
+    /// <returns>The <see cref="Vector4"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public Vector4 ToScaledVector4(PixelAlphaRepresentation alphaRepresentation)
+    {
+        bool targetIsAssociated = alphaRepresentation == PixelAlphaRepresentation.Associated;
+        Vector4 vector = this.boxedHighPrecisionPixel?.ToScaledVector4() ?? this.data;
+
+        if (this.dataIsAssociated == targetIsAssociated)
+        {
+            return vector;
+        }
+
+        if (targetIsAssociated)
+        {
+            Numerics.Premultiply(ref vector);
+        }
+        else
+        {
+            Numerics.UnPremultiply(ref vector);
+        }
+
+        return vector;
     }
 
     /// <summary>
@@ -467,7 +501,7 @@ public readonly partial struct Color : IEquatable<Color>
     {
         if (this.boxedHighPrecisionPixel is null && other.boxedHighPrecisionPixel is null)
         {
-            return this.data == other.data && this.isAssociated == other.isAssociated;
+            return this.isAssociated == other.isAssociated && this.ToScaledVector4() == other.ToScaledVector4();
         }
 
         return this.isAssociated == other.isAssociated
@@ -483,7 +517,7 @@ public readonly partial struct Color : IEquatable<Color>
     {
         if (this.boxedHighPrecisionPixel is null)
         {
-            return HashCode.Combine(this.data, this.isAssociated);
+            return HashCode.Combine(this.ToScaledVector4(), this.isAssociated);
         }
 
         return HashCode.Combine(this.boxedHighPrecisionPixel.ToScaledVector4(), this.isAssociated);

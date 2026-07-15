@@ -5,7 +5,6 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.PixelFormats;
-using SixLabors.ImageSharp.PixelFormats.PixelBlenders;
 
 namespace SixLabors.ImageSharp.Tests.PixelFormats;
 
@@ -17,8 +16,6 @@ namespace SixLabors.ImageSharp.Tests.PixelFormats;
 public abstract class AssociatedAlphaPixelTests<TPixel>
     where TPixel : unmanaged, IPixel<TPixel>
 {
-    private static readonly ApproximateFloatComparer VectorComparer = new(.005F);
-
     /// <summary>
     /// Gets the color channels described by the pixel format.
     /// </summary>
@@ -41,75 +38,6 @@ public abstract class AssociatedAlphaPixelTests<TPixel>
         {
             Assert.Equal(expectedComponentPrecision, componentInfo.GetComponentPrecision(i));
         }
-    }
-
-    [Fact]
-    public void ScaledVectorConversionsUseAssociatedComponents()
-    {
-        Vector4 associated = new(.25F, .125F, .0625F, .5F);
-
-        TPixel pixel = TPixel.FromScaledVector4(associated);
-
-        Assert.Equal(associated, pixel.ToScaledVector4(), VectorComparer);
-    }
-
-    [Fact]
-    public void FromRgba32AssociatesColorComponents()
-    {
-        Rgba32 source = new(192, 128, 64, 128);
-        Vector4 expected = source.ToScaledVector4();
-        Numerics.Premultiply(ref expected);
-
-        TPixel pixel = TPixel.FromRgba32(source);
-
-        Assert.Equal(expected, pixel.ToScaledVector4(), VectorComparer);
-    }
-
-    [Fact]
-    public void ToRgba32ReturnsUnassociatedColorComponents()
-    {
-        Rgba32 expected = new(192, 128, 64, 128);
-        TPixel pixel = TPixel.FromRgba32(expected);
-
-        Rgba32 actual = pixel.ToRgba32();
-
-        AssertRgba32Equal(expected, actual, 3);
-    }
-
-    [Fact]
-    public void ColorConversionsPreserveUnassociatedColor()
-    {
-        Rgba32 expected = new(192, 128, 64, 128);
-        TPixel source = TPixel.FromRgba32(expected);
-
-        Color color = Color.FromPixel(source);
-        Rgba32 actual = color.ToPixel<Rgba32>();
-        TPixel roundTrip = color.ToPixel<TPixel>();
-
-        AssertRgba32Equal(expected, actual, 3);
-        Assert.Equal(source.ToScaledVector4(), roundTrip.ToScaledVector4(), VectorComparer);
-    }
-
-    [Fact]
-    public void ScalarBlendingUsesUnassociatedColorValues()
-    {
-        TPixel background = TPixel.FromRgba32(new Rgba32(200, 40, 80, 160));
-        TPixel source = TPixel.FromRgba32(new Rgba32(20, 180, 100, 96));
-        PixelBlender<TPixel> associatedBlender = PixelOperations<TPixel>.Instance.GetPixelBlender(PixelColorBlendingMode.Normal, PixelAlphaCompositionMode.SrcOver);
-        PixelBlender<Rgba32> unassociatedBlender = new DefaultPixelBlenders<Rgba32>.NormalSrcOver();
-
-        Rgba32 expected = unassociatedBlender.Blend(background.ToRgba32(), source.ToRgba32(), .75F);
-        Rgba32 actual = associatedBlender.Blend(background, source, .75F).ToRgba32();
-
-        AssertRgba32Equal(expected, actual, 4);
-    }
-
-    private static void AssertRgba32Equal(Rgba32 expected, Rgba32 actual, int tolerance)
-    {
-        Assert.InRange(Math.Abs(expected.R - actual.R), 0, tolerance);
-        Assert.InRange(Math.Abs(expected.G - actual.G), 0, tolerance);
-        Assert.InRange(Math.Abs(expected.B - actual.B), 0, tolerance);
-        Assert.InRange(Math.Abs(expected.A - actual.A), 0, tolerance);
     }
 }
 
@@ -205,6 +133,29 @@ public class HalfVector4PTests : AssociatedAlphaPixelTests<HalfVector4P>
 
         Assert.Equal(new HalfVector4(associated).PackedValue, new HalfVector4P(associated).PackedValue);
     }
+
+    [Fact]
+    public void ColorRoundTripDoesNotIntroduceAdditionalAssociationLoss()
+    {
+        const ulong zeroComponent = 0xBC00;
+
+        // This is the first valid Half component/alpha pair for which an unassociate/reassociate round trip
+        // selects the adjacent component value instead of the direct scaled-vector conversion result.
+        HalfVector4P source = new()
+        {
+            PackedValue = 0x8BF5 | (zeroComponent << 16) | (zeroComponent << 32) | (0x05DFUL << 48)
+        };
+        HalfVector4P expected = HalfVector4P.FromScaledVector4(source.ToScaledVector4());
+        Color color = Color.FromPixel(source);
+        Color[] bulkColors = new Color[1];
+
+        Color.FromPixel<HalfVector4P>(new[] { source }, bulkColors);
+
+        Assert.Equal(source.ToScaledVector4(), color.ToScaledVector4());
+        Assert.Equal(expected, color.ToPixel<HalfVector4P>());
+        Assert.Equal(source.ToScaledVector4(), bulkColors[0].ToScaledVector4());
+        Assert.Equal(expected, bulkColors[0].ToPixel<HalfVector4P>());
+    }
 }
 
 /// <summary>
@@ -248,16 +199,18 @@ public class AssociatedAlphaPackedPixelConversionTests
     private static void AssertLosslessRoundTrip<TIntermediate>()
         where TIntermediate : unmanaged, IPixel<TIntermediate>
     {
-        Rgba32P[] expected =
-        [
-            new(0, 0, 0, 0),
-            new(1, 2, 3, 4),
-            new(31, 63, 95, 127),
-            new(64, 128, 192, 255),
-            new(255, 255, 255, 255),
-        ];
+        Rgba32P[] expected = new Rgba32P[byte.MaxValue * 4 + 4];
         TIntermediate[] intermediate = new TIntermediate[expected.Length];
         Rgba32P[] actual = new Rgba32P[expected.Length];
+
+        for (int component = 0; component <= byte.MaxValue; component++)
+        {
+            int index = component * 4;
+            expected[index] = new Rgba32P((byte)component, 0, 0, byte.MaxValue);
+            expected[index + 1] = new Rgba32P(0, (byte)component, 0, byte.MaxValue);
+            expected[index + 2] = new Rgba32P(0, 0, (byte)component, byte.MaxValue);
+            expected[index + 3] = new Rgba32P(0, 0, 0, (byte)component);
+        }
 
         PixelOperations<TIntermediate>.Instance.From<Rgba32P>(Configuration.Default, expected, intermediate);
         PixelOperations<Rgba32P>.Instance.From<TIntermediate>(Configuration.Default, intermediate, actual);
@@ -273,13 +226,16 @@ public class AssociatedAlphaPackedPixelConversionTests
     private static void AssertScalarAndBulkAssociatedVectorsAreEqual<TPixel>(Func<byte, byte, byte, byte, TPixel> createPixel)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        TPixel[] pixels = new TPixel[64];
+        TPixel[] pixels = new TPixel[byte.MaxValue * 4 + 4];
         Vector4[] actual = new Vector4[pixels.Length];
 
-        for (int i = 0; i < pixels.Length; i++)
+        for (int component = 0; component <= byte.MaxValue; component++)
         {
-            int component = i * 4;
-            pixels[i] = createPixel((byte)component, (byte)(component + 1), (byte)(component + 2), (byte)(component + 3));
+            int index = component * 4;
+            pixels[index] = createPixel((byte)component, 0, 0, byte.MaxValue);
+            pixels[index + 1] = createPixel(0, (byte)component, 0, byte.MaxValue);
+            pixels[index + 2] = createPixel(0, 0, (byte)component, byte.MaxValue);
+            pixels[index + 3] = createPixel(0, 0, 0, (byte)component);
         }
 
         PixelOperations<TPixel>.Instance.ToAssociatedScaledVector4(Configuration.Default, pixels, actual);
@@ -320,6 +276,110 @@ public class AssociatedAlphaPackedPixelConversionTests
 public class AssociatedToUnassociatedPackedPixelConversionTests
 {
     [Fact]
+    public void Rgba32ToRgba32PMatchesExactAssociationForEveryComponentAndAlpha()
+        => AssertUnsignedByteAssociation((red, green, blue, alpha) => new Rgba32P(red, green, blue, alpha));
+
+    [Fact]
+    public void Rgba32ToBgra32PMatchesExactAssociationForEveryComponentAndAlpha()
+        => AssertUnsignedByteAssociation((red, green, blue, alpha) => new Bgra32P(red, green, blue, alpha));
+
+    [Fact]
+    public void Rgba32ToArgb32PMatchesExactAssociationForEveryComponentAndAlpha()
+        => AssertUnsignedByteAssociation((red, green, blue, alpha) => new Argb32P(red, green, blue, alpha));
+
+    [Fact]
+    public void Rgba32ToAbgr32PMatchesExactAssociationForEveryComponentAndAlpha()
+        => AssertUnsignedByteAssociation((red, green, blue, alpha) => new Abgr32P(red, green, blue, alpha));
+
+    [Fact]
+    public void Rgba32ToNormalizedByte4PMatchesExactAssociationForEveryComponentAndAlpha()
+    {
+        const int pairCount = 65536;
+        const int channelCount = 3;
+        Rgba32[] source = new Rgba32[pairCount * channelCount];
+        NormalizedByte4P[] expected = new NormalizedByte4P[source.Length];
+        NormalizedByte4P[] actualBulk = new NormalizedByte4P[source.Length];
+        int index = 0;
+
+        for (int alpha = 0; alpha <= byte.MaxValue; alpha++)
+        {
+            // NormalizedByte4 has 254 intervals from -1 through 1, so alpha is first rounded to that destination grid.
+            int destinationAlpha = ((alpha * 254) + 127) / byte.MaxValue;
+
+            for (int unassociated = 0; unassociated <= byte.MaxValue; unassociated++)
+            {
+                // Association uses the alpha representable by the destination, then rounds the result to the same 254-interval grid.
+                int associated = ((unassociated * destinationAlpha) + 127) / byte.MaxValue;
+
+                source[index] = new Rgba32((byte)unassociated, 0, 0, (byte)alpha);
+                expected[index++] = CreateNormalizedByte4P(associated, 0, 0, destinationAlpha);
+                source[index] = new Rgba32(0, (byte)unassociated, 0, (byte)alpha);
+                expected[index++] = CreateNormalizedByte4P(0, associated, 0, destinationAlpha);
+                source[index] = new Rgba32(0, 0, (byte)unassociated, (byte)alpha);
+                expected[index++] = CreateNormalizedByte4P(0, 0, associated, destinationAlpha);
+            }
+        }
+
+        PixelOperations<NormalizedByte4P>.Instance.From<Rgba32>(Configuration.Default, source, actualBulk);
+
+        Assert.Equal(expected, actualBulk);
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            Assert.Equal(expected[i], NormalizedByte4P.FromRgba32(source[i]));
+            Assert.Equal(expected[i], Color.FromPixel(source[i]).ToPixel<NormalizedByte4P>());
+        }
+    }
+
+    [Fact]
+    public void Rgba32ToHalfVector4PMatchesExactAssociationForEveryComponentAndAlpha()
+    {
+        const int pairCount = 65536;
+        const int channelCount = 3;
+
+        // HalfVector4 maps scaled zero to native -1, whose IEEE 754 binary16 representation is 0xBC00.
+        const ulong zeroComponentBits = 0xBC00;
+        Rgba32[] source = new Rgba32[pairCount * channelCount];
+        HalfVector4P[] expected = new HalfVector4P[source.Length];
+        HalfVector4P[] actualBulk = new HalfVector4P[source.Length];
+        int index = 0;
+
+        for (int alpha = 0; alpha <= byte.MaxValue; alpha++)
+        {
+            // HalfVector4 stores normalized values over -1 through 1. Association must use the alpha value
+            // recovered from the destination half, rather than the higher-precision source alpha.
+            float normalizedAlpha = (float)(alpha / (double)byte.MaxValue);
+            float nativeAlpha = (normalizedAlpha * 2F) - 1F;
+            ushort alphaBits = BitConverter.HalfToUInt16Bits((Half)nativeAlpha);
+            float destinationAlpha = ((float)BitConverter.UInt16BitsToHalf(alphaBits) + 1F) * .5F;
+
+            for (int unassociated = 0; unassociated <= byte.MaxValue; unassociated++)
+            {
+                float normalizedComponent = (float)(unassociated / (double)byte.MaxValue);
+                float associated = normalizedComponent * destinationAlpha;
+                ushort associatedBits = BitConverter.HalfToUInt16Bits((Half)((associated * 2F) - 1F));
+                ulong alphaPacked = (ulong)alphaBits << 48;
+
+                source[index] = new Rgba32((byte)unassociated, 0, 0, (byte)alpha);
+                expected[index++] = new HalfVector4P { PackedValue = associatedBits | (zeroComponentBits << 16) | (zeroComponentBits << 32) | alphaPacked };
+                source[index] = new Rgba32(0, (byte)unassociated, 0, (byte)alpha);
+                expected[index++] = new HalfVector4P { PackedValue = zeroComponentBits | ((ulong)associatedBits << 16) | (zeroComponentBits << 32) | alphaPacked };
+                source[index] = new Rgba32(0, 0, (byte)unassociated, (byte)alpha);
+                expected[index++] = new HalfVector4P { PackedValue = zeroComponentBits | (zeroComponentBits << 16) | ((ulong)associatedBits << 32) | alphaPacked };
+            }
+        }
+
+        PixelOperations<HalfVector4P>.Instance.From<Rgba32>(Configuration.Default, source, actualBulk);
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            Assert.Equal(expected[i], HalfVector4P.FromRgba32(source[i]));
+            Assert.Equal(expected[i], Color.FromPixel(source[i]).ToPixel<HalfVector4P>());
+            Assert.Equal(expected[i], actualBulk[i]);
+        }
+    }
+
+    [Fact]
     public void Rgba32PToRgba32ScalarRoundTripPreservesEveryValidAssociatedComponent()
     {
         for (int alpha = 0; alpha <= byte.MaxValue; alpha++)
@@ -344,6 +404,11 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
     [Fact]
     public void ColorFromRgba32PPreservesEveryValidAssociatedComponent()
     {
+        const int pairCount = 32896;
+        Rgba32P[] sourcePixels = new Rgba32P[pairCount];
+        Color[] bulkColors = new Color[pairCount];
+        int index = 0;
+
         for (int alpha = 0; alpha <= byte.MaxValue; alpha++)
         {
             for (int associated = 0; associated <= alpha; associated++)
@@ -351,10 +416,18 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
                 byte unassociated = alpha == 0 ? (byte)0 : (byte)(((associated * byte.MaxValue) + (alpha / 2)) / alpha);
                 Rgba32P source = new((byte)associated, 0, 0, (byte)alpha);
                 Color color = Color.FromPixel(source);
+                sourcePixels[index++] = source;
 
                 Assert.Equal(new Rgba32(unassociated, 0, 0, (byte)alpha), color.ToPixel<Rgba32>());
                 Assert.Equal(source, color.ToPixel<Rgba32P>());
             }
+        }
+
+        Color.FromPixel<Rgba32P>(sourcePixels, bulkColors);
+
+        for (int i = 0; i < sourcePixels.Length; i++)
+        {
+            Assert.Equal(sourcePixels[i], bulkColors[i].ToPixel<Rgba32P>());
         }
     }
 
@@ -397,6 +470,11 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
     [Fact]
     public void ColorFromNormalizedByte4PPreservesEveryValidAssociatedComponent()
     {
+        const int pairCount = 32640;
+        NormalizedByte4P[] sourcePixels = new NormalizedByte4P[pairCount];
+        Color[] bulkColors = new Color[pairCount];
+        int index = 0;
+
         for (int alpha = 0; alpha < byte.MaxValue; alpha++)
         {
             for (int associated = 0; associated <= alpha; associated++)
@@ -405,10 +483,18 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
                 byte unassociatedAlpha = (byte)(((alpha * byte.MaxValue) + 127) / 254);
                 NormalizedByte4P source = CreateNormalizedByte4P(associated, 0, 0, alpha);
                 Color color = Color.FromPixel(source);
+                sourcePixels[index++] = source;
 
                 Assert.Equal(new Rgba32(unassociated, 0, 0, unassociatedAlpha), color.ToPixel<Rgba32>());
                 Assert.Equal(source, color.ToPixel<NormalizedByte4P>());
             }
+        }
+
+        Color.FromPixel<NormalizedByte4P>(sourcePixels, bulkColors);
+
+        for (int i = 0; i < sourcePixels.Length; i++)
+        {
+            Assert.Equal(sourcePixels[i], bulkColors[i].ToPixel<NormalizedByte4P>());
         }
     }
 
@@ -444,6 +530,15 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
 
         Assert.Equal(expectedUnassociated, actualUnassociated);
         Assert.Equal(source, actualRoundTrip);
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            Bgra32 expected = expectedUnassociated[i];
+
+            // Scalar conversion and Color must preserve the same exact canonical value proven for the bulk path.
+            Assert.Equal(new Rgba32(expected.R, expected.G, expected.B, expected.A), source[i].ToRgba32());
+            Assert.Equal(expected, Color.FromPixel(source[i]).ToPixel<Bgra32>());
+        }
     }
 
     private static void AssertUnsignedByteBulkRoundTrip<TPixel>(Func<byte, byte, byte, byte, TPixel> createPixel)
@@ -479,6 +574,53 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
 
         Assert.Equal(expectedUnassociated, actualUnassociated);
         Assert.Equal(source, actualRoundTrip);
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            Bgra32 expected = expectedUnassociated[i];
+
+            // Scalar conversion and Color must use the same exact canonical byte as the independently calculated bulk oracle.
+            Assert.Equal(new Rgba32(expected.R, expected.G, expected.B, expected.A), source[i].ToRgba32());
+            Assert.Equal(expected, Color.FromPixel(source[i]).ToPixel<Bgra32>());
+        }
+    }
+
+    private static void AssertUnsignedByteAssociation<TPixel>(Func<byte, byte, byte, byte, TPixel> createPixel)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        const int pairCount = 65536;
+        const int channelCount = 3;
+        Rgba32[] source = new Rgba32[pairCount * channelCount];
+        TPixel[] expected = new TPixel[source.Length];
+        TPixel[] actualBulk = new TPixel[source.Length];
+        int index = 0;
+
+        for (int alpha = 0; alpha <= byte.MaxValue; alpha++)
+        {
+            for (int unassociated = 0; unassociated <= byte.MaxValue; unassociated++)
+            {
+                // The destination stores round(unassociated * alpha / 255). The integer numerator adds half
+                // the divisor so the expected value is independent of the floating-point implementation.
+                byte associated = (byte)(((unassociated * alpha) + 127) / byte.MaxValue);
+
+                source[index] = new Rgba32((byte)unassociated, 0, 0, (byte)alpha);
+                expected[index++] = createPixel(associated, 0, 0, (byte)alpha);
+                source[index] = new Rgba32(0, (byte)unassociated, 0, (byte)alpha);
+                expected[index++] = createPixel(0, associated, 0, (byte)alpha);
+                source[index] = new Rgba32(0, 0, (byte)unassociated, (byte)alpha);
+                expected[index++] = createPixel(0, 0, associated, (byte)alpha);
+            }
+        }
+
+        PixelOperations<TPixel>.Instance.From<Rgba32>(Configuration.Default, source, actualBulk);
+
+        Assert.Equal(expected, actualBulk);
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            Assert.Equal(expected[i], TPixel.FromRgba32(source[i]));
+            Assert.Equal(expected[i], Color.FromPixel(source[i]).ToPixel<TPixel>());
+        }
     }
 
     private static NormalizedByte4P CreateNormalizedByte4P(int red, int green, int blue, int alpha)
@@ -638,7 +780,7 @@ public class AssociatedDestinationAlphaQuantizationTests
             foreach (byte component in components)
             {
                 int expectedRed = ((component * expectedAlpha) + 127) / byte.MaxValue;
-                Vector4 expected = new Vector4(expectedRed, 0, 0, expectedAlpha) * (1F / byte.MaxValue);
+                Vector4 expected = new Vector4(expectedRed, 0, 0, expectedAlpha) / byte.MaxValue;
 
                 Assert.Equal(expected, TPixel.FromRgba64(source[index]).ToScaledVector4());
                 Assert.Equal(expected, actualBulk[index].ToScaledVector4());

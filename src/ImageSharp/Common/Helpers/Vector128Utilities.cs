@@ -363,30 +363,58 @@ internal static class Vector128_
     }
 
     /// <summary>
-    /// Performs a multiplication and an addition of the <see cref="Vector128{Single}"/>.
+    /// Computes an estimate of (<paramref name="left"/> * <paramref name="right"/>) + <paramref name="addend"/>.
     /// </summary>
-    /// <remarks>ret = (vm0 * vm1) + va</remarks>
-    /// <param name="va">The vector to add to the intermediate result.</param>
-    /// <param name="vm0">The first vector to multiply.</param>
-    /// <param name="vm1">The second vector to multiply.</param>
-    /// <returns>The <see cref="Vector256{T}"/>.</returns>
+    /// <param name="left">The first vector to multiply.</param>
+    /// <param name="right">The second vector to multiply.</param>
+    /// <param name="addend">The vector to add to the product.</param>
+    /// <returns>An estimate of the multiplication and addition result.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vector128<float> MultiplyAdd(
-        Vector128<float> va,
-        Vector128<float> vm0,
-        Vector128<float> vm1)
+    public static Vector128<float> MultiplyAddEstimate(Vector128<float> left, Vector128<float> right, Vector128<float> addend)
     {
         if (Fma.IsSupported)
         {
-            return Fma.MultiplyAdd(vm1, vm0, va);
+            return Fma.MultiplyAdd(left, right, addend);
         }
 
         if (AdvSimd.IsSupported)
         {
-            return AdvSimd.FusedMultiplyAdd(va, vm0, vm1);
+            return AdvSimd.FusedMultiplyAdd(addend, left, right);
         }
 
-        return va + (vm0 * vm1);
+        return (left * right) + addend;
+    }
+
+    /// <summary>
+    /// Computes (<paramref name="left"/> * <paramref name="right"/>) + <paramref name="addend"/>, rounded as one ternary operation.
+    /// </summary>
+    /// <param name="left">The first vector to multiply.</param>
+    /// <param name="right">The second vector to multiply.</param>
+    /// <param name="addend">The vector to add to the product.</param>
+    /// <returns>The fused multiplication and addition result.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector128<float> FusedMultiplyAdd(Vector128<float> left, Vector128<float> right, Vector128<float> addend)
+    {
+        if (Fma.IsSupported)
+        {
+            return Fma.MultiplyAdd(left, right, addend);
+        }
+
+        if (AdvSimd.IsSupported)
+        {
+            return AdvSimd.FusedMultiplyAdd(addend, left, right);
+        }
+
+        // WebAssembly SIMD has no exact fused multiply-add, so match the runtime fallback by preserving fused rounding per element.
+        Vector64<float> lower = Vector64.Create(
+            MathF.FusedMultiplyAdd(left.GetElement(0), right.GetElement(0), addend.GetElement(0)),
+            MathF.FusedMultiplyAdd(left.GetElement(1), right.GetElement(1), addend.GetElement(1)));
+
+        Vector64<float> upper = Vector64.Create(
+            MathF.FusedMultiplyAdd(left.GetElement(2), right.GetElement(2), addend.GetElement(2)),
+            MathF.FusedMultiplyAdd(left.GetElement(3), right.GetElement(3), addend.GetElement(3)));
+
+        return Vector128.Create(lower, upper);
     }
 
     /// <summary>

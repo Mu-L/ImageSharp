@@ -711,6 +711,10 @@ internal static partial class SimdUtils
             ReadOnlySpan<byte> source,
             Span<float> destination)
         {
+            const double reciprocal = 1D / byte.MaxValue;
+            const float reciprocalHigh = (float)reciprocal;
+            const float reciprocalLow = (float)(reciprocal - reciprocalHigh);
+
             if (Vector512.IsHardwareAccelerated && Avx512F.IsSupported)
             {
                 DebugVerifySpanInput(source, destination, Vector512<byte>.Count);
@@ -719,6 +723,8 @@ internal static partial class SimdUtils
 
                 ref byte sourceBase = ref MemoryMarshal.GetReference(source);
                 ref Vector512<float> destinationBase = ref Unsafe.As<float, Vector512<float>>(ref MemoryMarshal.GetReference(destination));
+                Vector512<float> high = Vector512.Create(reciprocalHigh);
+                Vector512<float> low = Vector512.Create(reciprocalLow);
 
                 for (nuint i = 0; i < n; i++)
                 {
@@ -728,11 +734,16 @@ internal static partial class SimdUtils
                     Vector512<int> i2 = Avx512F.ConvertToVector512Int32(Vector128.LoadUnsafe(ref sourceBase, si + (nuint)(Vector512<int>.Count * 2)));
                     Vector512<int> i3 = Avx512F.ConvertToVector512Int32(Vector128.LoadUnsafe(ref sourceBase, si + (nuint)(Vector512<int>.Count * 3)));
 
-                    // Declare multiplier on each line. Codegen is better.
-                    Vector512<float> f0 = Vector512.Create(1 / (float)byte.MaxValue) * Avx512F.ConvertToVector512Single(i0);
-                    Vector512<float> f1 = Vector512.Create(1 / (float)byte.MaxValue) * Avx512F.ConvertToVector512Single(i1);
-                    Vector512<float> f2 = Vector512.Create(1 / (float)byte.MaxValue) * Avx512F.ConvertToVector512Single(i2);
-                    Vector512<float> f3 = Vector512.Create(1 / (float)byte.MaxValue) * Avx512F.ConvertToVector512Single(i3);
+                    Vector512<float> f0 = Avx512F.ConvertToVector512Single(i0);
+                    Vector512<float> f1 = Avx512F.ConvertToVector512Single(i1);
+                    Vector512<float> f2 = Avx512F.ConvertToVector512Single(i2);
+                    Vector512<float> f3 = Avx512F.ConvertToVector512Single(i3);
+
+                    // The residual term restores the correctly rounded byte / 255F result without paying for vector division.
+                    f0 = Vector512_.FusedMultiplyAdd(f0, high, f0 * low);
+                    f1 = Vector512_.FusedMultiplyAdd(f1, high, f1 * low);
+                    f2 = Vector512_.FusedMultiplyAdd(f2, high, f2 * low);
+                    f3 = Vector512_.FusedMultiplyAdd(f3, high, f3 * low);
 
                     ref Vector512<float> d = ref Unsafe.Add(ref destinationBase, i * 4);
 
@@ -750,6 +761,8 @@ internal static partial class SimdUtils
 
                 ref byte sourceBase = ref MemoryMarshal.GetReference(source);
                 ref Vector256<float> destinationBase = ref Unsafe.As<float, Vector256<float>>(ref MemoryMarshal.GetReference(destination));
+                Vector256<float> high = Vector256.Create(reciprocalHigh);
+                Vector256<float> low = Vector256.Create(reciprocalLow);
 
                 for (nuint i = 0; i < n; i++)
                 {
@@ -762,11 +775,15 @@ internal static partial class SimdUtils
                     ref ulong refULong = ref Unsafe.As<byte, ulong>(ref Unsafe.Add(ref sourceBase, si));
                     Vector256<int> i3 = Avx2.ConvertToVector256Int32(Vector128.CreateScalarUnsafe(Unsafe.Add(ref refULong, 3)).AsByte());
 
-                    // Declare multiplier on each line. Codegen is better.
-                    Vector256<float> f0 = Vector256.Create(1 / (float)byte.MaxValue) * Avx.ConvertToVector256Single(i0);
-                    Vector256<float> f1 = Vector256.Create(1 / (float)byte.MaxValue) * Avx.ConvertToVector256Single(i1);
-                    Vector256<float> f2 = Vector256.Create(1 / (float)byte.MaxValue) * Avx.ConvertToVector256Single(i2);
-                    Vector256<float> f3 = Vector256.Create(1 / (float)byte.MaxValue) * Avx.ConvertToVector256Single(i3);
+                    Vector256<float> f0 = Avx.ConvertToVector256Single(i0);
+                    Vector256<float> f1 = Avx.ConvertToVector256Single(i1);
+                    Vector256<float> f2 = Avx.ConvertToVector256Single(i2);
+                    Vector256<float> f3 = Avx.ConvertToVector256Single(i3);
+
+                    f0 = Vector256_.FusedMultiplyAdd(f0, high, f0 * low);
+                    f1 = Vector256_.FusedMultiplyAdd(f1, high, f1 * low);
+                    f2 = Vector256_.FusedMultiplyAdd(f2, high, f2 * low);
+                    f3 = Vector256_.FusedMultiplyAdd(f3, high, f3 * low);
 
                     ref Vector256<float> d = ref Unsafe.Add(ref destinationBase, i * 4);
 
@@ -785,7 +802,8 @@ internal static partial class SimdUtils
                 ref byte sourceBase = ref MemoryMarshal.GetReference(source);
                 ref Vector128<float> destinationBase = ref Unsafe.As<float, Vector128<float>>(ref MemoryMarshal.GetReference(destination));
 
-                Vector128<float> scale = Vector128.Create(1 / (float)byte.MaxValue);
+                Vector128<float> high = Vector128.Create(reciprocalHigh);
+                Vector128<float> low = Vector128.Create(reciprocalLow);
 
                 for (nuint i = 0; i < n; i++)
                 {
@@ -810,10 +828,15 @@ internal static partial class SimdUtils
                         (i2, i3) = Vector128.Widen(s1.AsInt16());
                     }
 
-                    Vector128<float> f0 = scale * Vector128.ConvertToSingle(i0);
-                    Vector128<float> f1 = scale * Vector128.ConvertToSingle(i1);
-                    Vector128<float> f2 = scale * Vector128.ConvertToSingle(i2);
-                    Vector128<float> f3 = scale * Vector128.ConvertToSingle(i3);
+                    Vector128<float> f0 = Vector128.ConvertToSingle(i0);
+                    Vector128<float> f1 = Vector128.ConvertToSingle(i1);
+                    Vector128<float> f2 = Vector128.ConvertToSingle(i2);
+                    Vector128<float> f3 = Vector128.ConvertToSingle(i3);
+
+                    f0 = Vector128_.FusedMultiplyAdd(f0, high, f0 * low);
+                    f1 = Vector128_.FusedMultiplyAdd(f1, high, f1 * low);
+                    f2 = Vector128_.FusedMultiplyAdd(f2, high, f2 * low);
+                    f3 = Vector128_.FusedMultiplyAdd(f3, high, f3 * low);
 
                     ref Vector128<float> d = ref Unsafe.Add(ref destinationBase, i * 4);
 

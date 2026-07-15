@@ -398,7 +398,9 @@ internal static partial class AssociatedAlphaPorterDuffFunctions
         // Atop discards source-only color and retains the destination alpha unchanged.
         Vector4 sourceAlpha = Numerics.PermuteW(source);
         Vector4 destinationAlpha = Numerics.PermuteW(destination);
-        Vector4 result = (destination * (Vector4.One - sourceAlpha)) + overlap;
+        Vector4 coefficient = Vector4.One - sourceAlpha;
+        Vector4 result = Vector128_.FusedMultiplyAdd(destination.AsVector128(), coefficient.AsVector128(), overlap.AsVector128()).AsVector4();
+
         return Numerics.WithW(result, destinationAlpha);
     }
 
@@ -408,7 +410,8 @@ internal static partial class AssociatedAlphaPorterDuffFunctions
     {
         Vector256<float> sourceAlpha = Avx.Permute(source, ShuffleAlphaControl);
         Vector256<float> destinationAlpha = Avx.Permute(destination, ShuffleAlphaControl);
-        Vector256<float> result = (destination * (Vector256.Create(1F) - sourceAlpha)) + overlap;
+        Vector256<float> result = Vector256_.FusedMultiplyAdd(destination, Vector256.Create(1F) - sourceAlpha, overlap);
+
         return Avx.Blend(result, destinationAlpha, BlendAlphaControl);
     }
 
@@ -418,7 +421,8 @@ internal static partial class AssociatedAlphaPorterDuffFunctions
     {
         Vector512<float> sourceAlpha = Vector512_.ShuffleNative(source, ShuffleAlphaControl);
         Vector512<float> destinationAlpha = Vector512_.ShuffleNative(destination, ShuffleAlphaControl);
-        Vector512<float> result = (destination * (Vector512.Create(1F) - sourceAlpha)) + overlap;
+        Vector512<float> result = Vector512_.FusedMultiplyAdd(destination, Vector512.Create(1F) - sourceAlpha, overlap);
+
         return Vector512.ConditionalSelect(AlphaMask512(), destinationAlpha, result);
     }
 
@@ -506,18 +510,18 @@ internal static partial class AssociatedAlphaPorterDuffFunctions
     public static Vector4 BlendWithCoverage(Vector4 backdrop, Vector4 source, float coverage)
     {
         // Use the same fused operation as the wider paths so exact midpoints cannot change across vector widths.
-        return Vector128_.MultiplyAdd(backdrop.AsVector128(), (source - backdrop).AsVector128(), Vector128.Create(coverage)).AsVector4();
+        return Vector128_.FusedMultiplyAdd((source - backdrop).AsVector128(), Vector128.Create(coverage), backdrop.AsVector128()).AsVector4();
     }
 
     /// <inheritdoc cref="BlendWithCoverage(Vector4, Vector4, float)" />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector256<float> BlendWithCoverage(Vector256<float> backdrop, Vector256<float> source, Vector256<float> coverage)
-        => Vector256_.MultiplyAdd(backdrop, source - backdrop, coverage);
+        => Vector256_.FusedMultiplyAdd(source - backdrop, coverage, backdrop);
 
     /// <inheritdoc cref="BlendWithCoverage(Vector4, Vector4, float)" />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector512<float> BlendWithCoverage(Vector512<float> backdrop, Vector512<float> source, Vector512<float> coverage)
-        => Vector512_.MultiplyAdd(backdrop, source - backdrop, coverage);
+        => Vector512_.FusedMultiplyAdd(source - backdrop, coverage, backdrop);
 
     /// <summary>
     /// Calculates one associated Overlay overlap component without recovering either straight component.

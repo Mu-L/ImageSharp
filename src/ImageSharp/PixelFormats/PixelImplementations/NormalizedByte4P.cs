@@ -158,10 +158,7 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     /// </summary>
     /// <param name="source">The unassociated scaled vector.</param>
     /// <returns>The associated pixel.</returns>
-    private static NormalizedByte4P FromUnassociatedScaledVector4(Vector4 source)
-    {
-        return FromScaledVector4(Associate(source));
-    }
+    private static NormalizedByte4P FromUnassociatedScaledVector4(Vector4 source) => FromScaledVector4(Associate(source));
 
     /// <summary>
     /// Converts an unassociated scaled vector to the associated representation of a signed-normalized-byte destination.

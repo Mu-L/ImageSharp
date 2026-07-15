@@ -175,7 +175,7 @@ public partial struct Argb32 : IPixel<Argb32>, IPackedVector<uint>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly Vector4 ToVector4() => new Vector4(this.R, this.G, this.B, this.A) / MaxBytes;
+    public readonly Vector4 ToVector4() => new Vector4(this.R, this.G, this.B, this.A) / byte.MaxValue;
 
     /// <inheritdoc />
     public static PixelTypeInfo GetPixelTypeInfo()

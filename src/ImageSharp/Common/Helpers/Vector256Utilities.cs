@@ -114,25 +114,46 @@ internal static class Vector256_
     }
 
     /// <summary>
-    /// Performs a multiplication and an addition of the <see cref="Vector256{Single}"/>.
+    /// Computes an estimate of (<paramref name="left"/> * <paramref name="right"/>) + <paramref name="addend"/>.
     /// </summary>
-    /// <remarks>ret = (vm0 * vm1) + va</remarks>
-    /// <param name="va">The vector to add to the intermediate result.</param>
-    /// <param name="vm0">The first vector to multiply.</param>
-    /// <param name="vm1">The second vector to multiply.</param>
-    /// <returns>The <see cref="Vector256{T}"/>.</returns>
+    /// <param name="left">The first vector to multiply.</param>
+    /// <param name="right">The second vector to multiply.</param>
+    /// <param name="addend">The vector to add to the product.</param>
+    /// <returns>An estimate of the multiplication and addition result.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Vector256<float> MultiplyAdd(
-        Vector256<float> va,
-        Vector256<float> vm0,
-        Vector256<float> vm1)
+    public static Vector256<float> MultiplyAddEstimate(Vector256<float> left, Vector256<float> right, Vector256<float> addend)
     {
         if (Fma.IsSupported)
         {
-            return Fma.MultiplyAdd(vm0, vm1, va);
+            return Fma.MultiplyAdd(left, right, addend);
         }
 
-        return va + (vm0 * vm1);
+        Vector128<float> lower = Vector128_.MultiplyAddEstimate(left.GetLower(), right.GetLower(), addend.GetLower());
+        Vector128<float> upper = Vector128_.MultiplyAddEstimate(left.GetUpper(), right.GetUpper(), addend.GetUpper());
+
+        return Vector256.Create(lower, upper);
+    }
+
+    /// <summary>
+    /// Computes (<paramref name="left"/> * <paramref name="right"/>) + <paramref name="addend"/>, rounded as one ternary operation.
+    /// </summary>
+    /// <param name="left">The first vector to multiply.</param>
+    /// <param name="right">The second vector to multiply.</param>
+    /// <param name="addend">The vector to add to the product.</param>
+    /// <returns>The fused multiplication and addition result.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Vector256<float> FusedMultiplyAdd(Vector256<float> left, Vector256<float> right, Vector256<float> addend)
+    {
+        if (Fma.IsSupported)
+        {
+            return Fma.MultiplyAdd(left, right, addend);
+        }
+
+        // Match the runtime fallback by recursively applying the same fused contract to both halves.
+        Vector128<float> lower = Vector128_.FusedMultiplyAdd(left.GetLower(), right.GetLower(), addend.GetLower());
+        Vector128<float> upper = Vector128_.FusedMultiplyAdd(left.GetUpper(), right.GetUpper(), addend.GetUpper());
+
+        return Vector256.Create(lower, upper);
     }
 
     /// <summary>

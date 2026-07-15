@@ -19,8 +19,6 @@ namespace SixLabors.ImageSharp.PixelFormats;
 [StructLayout(LayoutKind.Sequential)]
 public partial struct Argb32P : IPixel<Argb32P>, IPackedVector<uint>
 {
-    private const float ByteScale = 1F / byte.MaxValue;
-
     private static readonly Vector4 Half = new(0.5F);
     private static readonly Vector4 MaxBytes = new(byte.MaxValue);
 
@@ -147,7 +145,7 @@ public partial struct Argb32P : IPixel<Argb32P>, IPackedVector<uint>
         => Rgba32.FromScaledVector4(Vector4Converters.AssociatedRgbaCompatible.ToUnassociatedVector4(this.R, this.G, this.B, this.A));
 
     /// <inheritdoc />
-    public readonly Vector4 ToScaledVector4() => new Vector4(this.R, this.G, this.B, this.A) * ByteScale;
+    public readonly Vector4 ToScaledVector4() => new Vector4(this.R, this.G, this.B, this.A) / byte.MaxValue;
 
     /// <inheritdoc />
     public readonly Vector4 ToVector4() => this.ToScaledVector4();

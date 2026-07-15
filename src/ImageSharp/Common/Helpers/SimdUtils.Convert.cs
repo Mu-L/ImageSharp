@@ -70,14 +70,13 @@ internal static partial class SimdUtils
     [MethodImpl(MethodImplOptions.NoInlining)]
     private static void ConvertByteToNormalizedFloatRemainder(ReadOnlySpan<byte> source, Span<float> destination)
     {
-        const float scale = 1F / byte.MaxValue;
         ref byte sBase = ref MemoryMarshal.GetReference(source);
         ref float dBase = ref MemoryMarshal.GetReference(destination);
 
         for (int i = 0; i < source.Length; i++)
         {
             // Match the SIMD conversion so one span cannot contain different float representations of the same byte value.
-            Unsafe.Add(ref dBase, (uint)i) = Unsafe.Add(ref sBase, (uint)i) * scale;
+            Unsafe.Add(ref dBase, (uint)i) = Unsafe.Add(ref sBase, (uint)i) / (float)byte.MaxValue;
         }
     }
 

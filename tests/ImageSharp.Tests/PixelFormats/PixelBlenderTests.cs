@@ -229,7 +229,12 @@ public class PixelBlenderTests
             HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
 
     [Fact]
-    public void AssociatedHardLightDestAtopRoundsExactMidpointAwayFromZero()
+    public void AssociatedHardLightDestAtopRoundsExactMidpointAwayFromZero() =>
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(
+            RunAssociatedHardLightDestAtopRoundsExactMidpointAwayFromZero,
+            HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
+
+    private static void RunAssociatedHardLightDestAtopRoundsExactMidpointAwayFromZero()
     {
         Rgba32P background = Rgba32P.FromRgba32(new Rgba32(220, 80, 40, 160));
         Rgba32P source = Rgba32P.FromRgba32(new Rgba32(20, 180, 120, 96));

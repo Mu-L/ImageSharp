@@ -159,13 +159,13 @@ public class FromVector4Bgra32P : FromVector4<Bgra32P>
     AMD RYZEN AI MAX+ 395 w/ Radeon 8060S 3.00GHz, 1 CPU, 32 logical and 16 physical cores
     .NET 8.0.28, X64 RyuJIT x86-64-v4
 
-    | Method                      | Count | Mean        | Error      | StdDev    | Ratio | RatioSD | Code Size | Allocated |
-    |---------------------------- |------ |------------:|-----------:|----------:|------:|--------:|----------:|----------:|
-    | PixelOperations_Base        | 64    |    59.73 ns |  19.644 ns |  1.077 ns |  1.00 |    0.02 |   1,152 B |         - |
-    | PixelOperations_Specialized | 64    |    50.86 ns |   7.372 ns |  0.404 ns |  0.85 |    0.01 |   2,975 B |         - |
-    | PixelOperations_Base        | 256   |   214.03 ns |  70.798 ns |  3.881 ns |  1.00 |    0.02 |   1,152 B |         - |
-    | PixelOperations_Specialized | 256   |    70.21 ns |  17.210 ns |  0.943 ns |  0.33 |    0.01 |   2,992 B |         - |
-    | PixelOperations_Base        | 2048  | 1,855.02 ns | 443.677 ns | 24.319 ns |  1.00 |    0.02 |   1,152 B |         - |
-    | PixelOperations_Specialized | 2048  |   272.82 ns |  39.302 ns |  2.154 ns |  0.15 |    0.00 |   2,992 B |         - |
+    | Method                      | Count | Mean        | Error    | StdDev    | Ratio | Code Size | Allocated |
+    |---------------------------- |------ |------------:|---------:|----------:|------:|----------:|----------:|
+    | PixelOperations_Base        | 64    |    53.35 ns | 0.208 ns |  0.311 ns |  1.00 |   1,152 B |         - |
+    | PixelOperations_Specialized | 64    |    46.61 ns | 0.195 ns |  0.280 ns |  0.87 |   2,975 B |         - |
+    | PixelOperations_Base        | 256   |   212.11 ns | 0.719 ns |  1.076 ns |  1.00 |   1,152 B |         - |
+    | PixelOperations_Specialized | 256   |    77.12 ns | 0.824 ns |  1.233 ns |  0.36 |   2,992 B |         - |
+    | PixelOperations_Base        | 2048  | 1,435.87 ns | 9.402 ns | 13.781 ns |  1.00 |   1,152 B |         - |
+    | PixelOperations_Specialized | 2048  |   250.89 ns | 9.354 ns | 13.416 ns |  0.17 |   2,992 B |         - |
     */
 }
