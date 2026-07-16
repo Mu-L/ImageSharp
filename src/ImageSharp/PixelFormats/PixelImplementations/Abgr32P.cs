@@ -14,7 +14,7 @@ namespace SixLabors.ImageSharp.PixelFormats;
 /// Components are stored in alpha, blue, green, and red order from least to most significant byte.
 /// </summary>
 /// <remarks>
-/// Component, packed, and vector values use associated alpha representation.
+/// The native component, packed, and vector representations use associated alpha.
 /// </remarks>
 [StructLayout(LayoutKind.Sequential)]
 public partial struct Abgr32P : IPixel<Abgr32P>, IPackedVector<uint>
@@ -148,7 +148,27 @@ public partial struct Abgr32P : IPixel<Abgr32P>, IPackedVector<uint>
     public readonly Vector4 ToScaledVector4() => new Vector4(this.R, this.G, this.B, this.A) / byte.MaxValue;
 
     /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToUnassociatedScaledVector4()
+    {
+        // Divide the stored byte magnitudes before normalization so unassociation cannot move an exact byte conversion across its rounding midpoint.
+        return Vector4Converters.AssociatedRgbaCompatible.ToUnassociatedVector4(this.R, this.G, this.B, this.A);
+    }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToAssociatedScaledVector4() => this.ToScaledVector4();
+
+    /// <inheritdoc />
     public readonly Vector4 ToVector4() => this.ToScaledVector4();
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToUnassociatedVector4() => this.ToUnassociatedScaledVector4();
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToAssociatedVector4() => this.ToVector4();
 
     /// <inheritdoc />
     public static PixelTypeInfo GetPixelTypeInfo()
@@ -162,10 +182,31 @@ public partial struct Abgr32P : IPixel<Abgr32P>, IPackedVector<uint>
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static Abgr32P FromScaledVector4(Vector4 source) => Pack(source);
+    public static Abgr32P FromScaledVector4(Vector4 source) => FromAssociatedScaledVector4(source);
 
     /// <inheritdoc />
-    public static Abgr32P FromVector4(Vector4 source) => FromScaledVector4(source);
+    public static Abgr32P FromVector4(Vector4 source) => FromAssociatedVector4(source);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Abgr32P FromUnassociatedVector4(Vector4 source) => FromUnassociatedScaledVector4(source);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Abgr32P FromAssociatedVector4(Vector4 source) => FromAssociatedScaledVector4(source);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Abgr32P FromUnassociatedScaledVector4(Vector4 source)
+        => Vector4Converters.AssociatedRgbaCompatible.FromUnassociatedVector4ToAbgr32P(source);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static Abgr32P FromAssociatedScaledVector4(Vector4 source)
+    {
+        // Rescale associated RGB when alpha rounds to a different byte so the stored channels remain associated with the alpha actually written.
+        return Vector4Converters.AssociatedRgbaCompatible.FromAssociatedVector4ToAbgr32P(source);
+    }
 
     /// <inheritdoc />
     public static Abgr32P FromAbgr32(Abgr32 source) => FromUnassociatedScaledVector4(source.ToScaledVector4());
@@ -218,14 +259,6 @@ public partial struct Abgr32P : IPixel<Abgr32P>, IPackedVector<uint>
     /// <inheritdoc />
     public override readonly string ToString() => $"Abgr32P({this.R}, {this.G}, {this.B}, {this.A})";
 
-    /// <summary>
-    /// Converts an unassociated scaled vector to associated representation.
-    /// </summary>
-    /// <param name="source">The unassociated scaled vector.</param>
-    /// <returns>The associated pixel.</returns>
-    private static Abgr32P FromUnassociatedScaledVector4(Vector4 source)
-        => FromScaledVector4(Vector4Converters.AssociatedRgbaCompatible.Associate(source));
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Abgr32P Pack(Vector4 vector)
     {
@@ -233,6 +266,7 @@ public partial struct Abgr32P : IPixel<Abgr32P>, IPackedVector<uint>
         vector += Half;
         vector = Numerics.Clamp(vector, Vector4.Zero, MaxBytes);
 
+        // Each converted component occupies one 32-bit lane. Reinterpreting those lanes as bytes exposes their low bytes at offsets 0, 4, 8, and 12.
         Vector128<byte> result = Vector128.ConvertToInt32(vector.AsVector128()).AsByte();
         return new Abgr32P(result.GetElement(0), result.GetElement(4), result.GetElement(8), result.GetElement(12));
     }

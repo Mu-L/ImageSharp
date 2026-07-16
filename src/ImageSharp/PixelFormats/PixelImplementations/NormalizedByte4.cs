@@ -16,6 +16,7 @@ namespace SixLabors.ImageSharp.PixelFormats;
 public partial struct NormalizedByte4 : IPixel<NormalizedByte4>, IPackedVector<uint>
 {
     private const float MaxPos = 127f;
+    private const float ScaledMagnitude = MaxPos * 2F;
     private static readonly Vector4 Half = Vector128.Create(MaxPos).AsVector4();
     private static readonly Vector4 MinusOne = Vector128.Create(-1f).AsVector4();
 
@@ -70,10 +71,14 @@ public partial struct NormalizedByte4 : IPixel<NormalizedByte4>, IPackedVector<u
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Vector4 ToScaledVector4()
     {
-        Vector4 scaled = this.ToVector4();
-        scaled += Vector4.One;
-        scaled /= 2f;
-        return scaled;
+        // Offset the exact signed components before division. Mapping an already normalized value through (value + 1) / 2 loses precision near -1 through cancellation.
+        Vector4 scaled = new(
+            (sbyte)((this.PackedValue >> 0) & 0xFF) + MaxPos,
+            (sbyte)((this.PackedValue >> 8) & 0xFF) + MaxPos,
+            (sbyte)((this.PackedValue >> 16) & 0xFF) + MaxPos,
+            (sbyte)((this.PackedValue >> 24) & 0xFF) + MaxPos);
+
+        return scaled / ScaledMagnitude;
     }
 
     /// <inheritdoc />
@@ -93,6 +98,61 @@ public partial struct NormalizedByte4 : IPixel<NormalizedByte4>, IPackedVector<u
 
     /// <inheritdoc />
     public static PixelOperations<NormalizedByte4> CreatePixelOperations() => new PixelOperations();
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToUnassociatedScaledVector4() => this.ToScaledVector4();
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToAssociatedScaledVector4()
+    {
+        Vector4 vector = this.ToScaledVector4();
+        Numerics.Premultiply(ref vector);
+        return vector;
+    }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToUnassociatedVector4() => this.ToVector4();
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToAssociatedVector4()
+    {
+        Vector4 vector = this.ToAssociatedScaledVector4();
+
+        // Native components use an affine [-1, 1] encoding, so direct multiplication would use the wrong zero point.
+        vector *= 2F;
+        vector -= Vector4.One;
+        return vector;
+    }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NormalizedByte4 FromUnassociatedScaledVector4(Vector4 source) => FromScaledVector4(source);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NormalizedByte4 FromAssociatedScaledVector4(Vector4 source)
+    {
+        Numerics.UnPremultiply(ref source);
+        return FromScaledVector4(source);
+    }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NormalizedByte4 FromUnassociatedVector4(Vector4 source) => FromVector4(source);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NormalizedByte4 FromAssociatedVector4(Vector4 source)
+    {
+        // Map the affine native encoding to logical [0, 1] space before unassociating.
+        source += Vector4.One;
+        source /= 2F;
+        return FromAssociatedScaledVector4(source);
+    }
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

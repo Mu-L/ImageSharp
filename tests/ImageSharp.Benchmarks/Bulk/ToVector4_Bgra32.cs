@@ -46,7 +46,7 @@ public class ToVector4_Bgra32P : ToVector4<Bgra32P>
     [Benchmark(Baseline = true)]
     public void PixelOperations_Base()
     {
-        new AssociatedAlphaPixelOperations<Bgra32P>().ToVector4(
+        new PixelOperations<Bgra32P>().ToVector4(
             this.Configuration,
             this.Source.GetSpan(),
             this.Destination.GetSpan());

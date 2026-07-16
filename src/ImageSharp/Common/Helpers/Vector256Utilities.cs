@@ -97,7 +97,8 @@ internal static class Vector256_
     /// Rounds all values in <paramref name="vector"/> to the nearest integer
     /// following <see cref="MidpointRounding.ToEven"/> semantics.
     /// </summary>
-    /// <param name="vector">The vector</param>
+    /// <param name="vector">The vector.</param>
+    /// <returns>The vector with each value rounded to the nearest integer.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector256<float> RoundToNearestInteger(Vector256<float> vector)
     {

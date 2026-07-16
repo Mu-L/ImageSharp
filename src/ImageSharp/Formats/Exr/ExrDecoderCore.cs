@@ -209,7 +209,10 @@ internal sealed class ExrDecoderCore : ImageDecoderCore
                 for (int x = 0; x < width; x++)
                 {
                     HalfVector4 pixelValue = new(redPixelData[x], greenPixelData[x], bluePixelData[x], hasAlpha ? alphaPixelData[x] : 1.0f);
-                    pixelRow[x] = TPixel.FromVector4(pixelValue.ToVector4());
+
+                    // OpenEXR channel values are associated. The destination conversion retains that representation for associated
+                    // pixels and unassociates only when the destination stores straight alpha.
+                    pixelRow[x] = TPixel.FromAssociatedVector4(pixelValue.ToVector4());
                 }
 
                 decodedRows++;
@@ -288,7 +291,9 @@ internal sealed class ExrDecoderCore : ImageDecoderCore
                 for (int x = 0; x < width; x++)
                 {
                     Rgba128 pixelValue = new(redPixelData[x], greenPixelData[x], bluePixelData[x], hasAlpha ? alphaPixelData[x] : uint.MaxValue);
-                    pixelRow[x] = TPixel.FromVector4(pixelValue.ToVector4());
+
+                    // Preserve the file's associated-alpha convention while converting from the native unsigned channel domain.
+                    pixelRow[x] = TPixel.FromAssociatedVector4(pixelValue.ToVector4());
                 }
 
                 decodedRows++;

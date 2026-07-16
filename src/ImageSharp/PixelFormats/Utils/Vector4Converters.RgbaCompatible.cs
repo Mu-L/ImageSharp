@@ -48,6 +48,7 @@ internal static partial class Vector4Converters
             Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
 
             int count = source.Length;
+            destination = destination[..count];
 
             // Not worth for small buffers:
             if (count < Vector4ConversionThreshold)

@@ -76,14 +76,15 @@ internal static class Vector512_
     /// Rounds all values in <paramref name="vector"/> to the nearest integer
     /// following <see cref="MidpointRounding.ToEven"/> semantics.
     /// </summary>
-    /// <param name="vector">The vector</param>
+    /// <param name="vector">The vector.</param>
+    /// <returns>The vector with each value rounded to the nearest integer.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Vector512<float> RoundToNearestInteger(Vector512<float> vector)
 
-          // imm8 = 0b1000:
-          //   imm8[7:4] = 0b0000 -> preserve 0 fractional bits (round to whole numbers)
-          //   imm8[3:0] = 0b1000 -> _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC (round to nearest even, suppress exceptions)
-          => Avx512F.RoundScale(vector, 0b0000_1000);
+        // imm8 = 0b1000:
+        //   imm8[7:4] = 0b0000 -> preserve 0 fractional bits (round to whole numbers)
+        //   imm8[3:0] = 0b1000 -> _MM_FROUND_TO_NEAREST_INT | _MM_FROUND_NO_EXC (round to nearest even, suppress exceptions)
+        => Avx512F.RoundScale(vector, 0b0000_1000);
 
     /// <summary>
     /// Computes an estimate of (<paramref name="left"/> * <paramref name="right"/>) + <paramref name="addend"/>.

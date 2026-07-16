@@ -17,50 +17,48 @@ public partial struct Argb32P
     internal class PixelOperations : AssociatedAlphaPixelOperations<Argb32P>
     {
         /// <inheritdoc />
-        internal override Vector4 ToUnassociatedScaledVector4(Argb32P source)
-            => Vector4Converters.AssociatedRgbaCompatible.ToUnassociatedVector4(source.R, source.G, source.B, source.A);
-
-        /// <inheritdoc />
-        internal override Argb32P FromUnassociatedScaledVector4(Vector4 source)
-            => FromScaledVector4(Vector4Converters.AssociatedRgbaCompatible.Associate(source));
-
-        /// <inheritdoc />
-        public override Argb32P FromAssociatedScaledVector4(Vector4 source)
-            => Vector4Converters.AssociatedRgbaCompatible.FromAssociatedVector4ToArgb32P(source);
-
-        /// <inheritdoc />
-        internal override void ToUnassociatedScaledVector4(Configuration configuration, ReadOnlySpan<Argb32P> source, Span<Vector4> destination)
+        protected override void ToUnassociatedVector4(Configuration configuration, ReadOnlySpan<Argb32P> source, Span<Vector4> destination)
             => Vector4Converters.AssociatedRgbaCompatible.ToUnassociatedVector4(source, destination);
 
         /// <inheritdoc />
-        internal override void FromUnassociatedScaledVector4(Configuration configuration, Span<Vector4> source, Span<Argb32P> destination)
+        protected override void ToAssociatedVector4(Configuration configuration, ReadOnlySpan<Argb32P> source, Span<Vector4> destination)
+            => Vector4Converters.AssociatedRgbaCompatible.ToAssociatedVector4(source, destination);
+
+        /// <inheritdoc />
+        protected override void FromUnassociatedVector4Destructive(Configuration configuration, Span<Vector4> source, Span<Argb32P> destination)
         {
-            source = source[..destination.Length];
-            Vector4Converters.AssociatedRgbaCompatible.Associate(source);
-            this.FromVector4Destructive(configuration, source, destination, PixelConversionModifiers.Scale);
+            // Native and scaled vectors have the same range for this format, so the byte-specialized converter is valid for both contracts.
+            Vector4Converters.AssociatedRgbaCompatible.FromUnassociatedVector4(source, destination);
         }
 
         /// <inheritdoc />
-        public override void FromAssociatedScaledVector4(Configuration configuration, Span<Vector4> source, Span<Argb32P> destination)
+        protected override void FromAssociatedVector4Destructive(Configuration configuration, Span<Vector4> source, Span<Argb32P> destination)
         {
-            source = source[..destination.Length];
+            // The converter rescales RGB when alpha rounds so the channels remain associated with the byte alpha actually stored.
             Vector4Converters.AssociatedRgbaCompatible.FromAssociatedVector4(source, destination);
         }
 
         /// <inheritdoc />
-        public override void ToVector4(
-            Configuration configuration,
-            ReadOnlySpan<Argb32P> source,
-            Span<Vector4> destinationVectors,
-            PixelConversionModifiers modifiers)
-            => Vector4Converters.AssociatedRgbaCompatible.ToVector4(source, destinationVectors, modifiers);
+        protected override void ToUnassociatedScaledVector4(Configuration configuration, ReadOnlySpan<Argb32P> source, Span<Vector4> destination)
+            => Vector4Converters.AssociatedRgbaCompatible.ToUnassociatedVector4(source, destination);
 
         /// <inheritdoc />
-        public override void FromVector4Destructive(
-            Configuration configuration,
-            Span<Vector4> sourceVectors,
-            Span<Argb32P> destination,
-            PixelConversionModifiers modifiers)
-            => Vector4Converters.AssociatedRgbaCompatible.FromVector4(sourceVectors, destination, modifiers);
+        protected override void ToAssociatedScaledVector4(Configuration configuration, ReadOnlySpan<Argb32P> source, Span<Vector4> destination)
+        {
+            // This byte format has the same normalized native and scaled ranges, so the unmodified converter satisfies both contracts.
+            Vector4Converters.AssociatedRgbaCompatible.ToAssociatedVector4(source, destination);
+        }
+
+        /// <inheritdoc />
+        protected override void FromUnassociatedScaledVector4Destructive(Configuration configuration, Span<Vector4> source, Span<Argb32P> destination)
+        {
+            Vector4Converters.AssociatedRgbaCompatible.FromUnassociatedVector4(source, destination);
+        }
+
+        /// <inheritdoc />
+        protected override void FromAssociatedScaledVector4Destructive(Configuration configuration, Span<Vector4> source, Span<Argb32P> destination)
+        {
+            Vector4Converters.AssociatedRgbaCompatible.FromAssociatedVector4(source, destination);
+        }
     }
 }

@@ -97,8 +97,8 @@ public abstract partial class PixelConverterTests
             {
                 ref TSourcePixel sp = ref Unsafe.Add(ref sourceRef, i);
                 ref TDestinationPixel dp = ref Unsafe.Add(ref destRef, i);
-                Vector4 vector = PixelOperations<TSourcePixel>.Instance.ToUnassociatedScaledVector4(sp);
-                dp = PixelOperations<TDestinationPixel>.Instance.FromUnassociatedScaledVector4(vector);
+                Vector4 vector = sp.ToUnassociatedScaledVector4();
+                dp = TDestinationPixel.FromUnassociatedScaledVector4(vector);
             }
         }
     }

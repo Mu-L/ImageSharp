@@ -106,7 +106,7 @@ public readonly partial struct Color : IEquatable<Color>
                 {
                     // Associated formats with at most eight bits per component can be canonicalized without loss by their pixel-specific conversion.
                     // Higher-precision formats retain their associated values because unassociation can lose representable data.
-                    Vector4 vector = PixelOperations<TPixel>.Instance.ToUnassociatedScaledVector4(source);
+                    Vector4 vector = source.ToUnassociatedScaledVector4();
                     return new Color(vector, info.AlphaRepresentation, PixelAlphaRepresentation.Unassociated);
                 }
 
@@ -187,11 +187,9 @@ public readonly partial struct Color : IEquatable<Color>
                 if (info.AlphaRepresentation == PixelAlphaRepresentation.Associated && maximumComponentPrecision <= (int)PixelComponentBitDepth.Bit8)
                 {
                     // Match the scalar conversion by retaining exact unassociated values from the format-specific operation.
-                    PixelOperations<TPixel> operations = PixelOperations<TPixel>.Instance;
-
                     for (int i = 0; i < source.Length; i++)
                     {
-                        Vector4 vector = operations.ToUnassociatedScaledVector4(source[i]);
+                        Vector4 vector = source[i].ToUnassociatedScaledVector4();
                         destination[i] = new Color(vector, info.AlphaRepresentation, PixelAlphaRepresentation.Unassociated);
                     }
 
@@ -398,21 +396,14 @@ public readonly partial struct Color : IEquatable<Color>
         }
 
         Vector4 vector = this.boxedHighPrecisionPixel?.ToScaledVector4() ?? this.data;
-        PixelOperations<TPixel> operations = PixelOperations<TPixel>.Instance;
-
         if (this.dataIsAssociated)
         {
-            if (operations is AssociatedAlphaPixelOperations<TPixel> associatedOperations)
-            {
-                // Preserve associated components directly while allowing the destination to quantize alpha to its own storage grid.
-                return associatedOperations.FromAssociatedScaledVector4(vector);
-            }
-
-            Numerics.UnPremultiply(ref vector);
+            // Preserve associated components directly while allowing the destination to quantize alpha to its own storage grid.
+            return TPixel.FromAssociatedScaledVector4(vector);
         }
 
         // Unassociated input lets an associated destination quantize alpha before it multiplies the color components.
-        return operations.FromUnassociatedScaledVector4(vector);
+        return TPixel.FromUnassociatedScaledVector4(vector);
     }
 
     /// <summary>

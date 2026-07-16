@@ -3,7 +3,6 @@
 
 using System.Numerics;
 using System.Runtime.CompilerServices;
-using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 
 namespace SixLabors.ImageSharp.PixelFormats;
@@ -12,7 +11,7 @@ namespace SixLabors.ImageSharp.PixelFormats;
 /// Packed pixel type containing four associated 8-bit signed normalized values ranging from -1 to 1.
 /// </summary>
 /// <remarks>
-/// Packed and vector values use associated alpha representation.
+/// The native packed and vector representations use associated alpha.
 /// </remarks>
 public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector<uint>
 {
@@ -64,11 +63,23 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     /// <inheritdoc />
     public readonly Vector4 ToScaledVector4()
     {
-        Vector4 scaled = this.ToVector4();
-        scaled += Vector4.One;
-        scaled /= 2F;
-        return scaled;
+        // Offset the exact signed components before division. Mapping an already normalized value through (value + 1) / 2 loses precision near -1 through cancellation.
+        Vector4 scaled = new(
+            (sbyte)((this.PackedValue >> 0) & 0xFF) + MaxPos,
+            (sbyte)((this.PackedValue >> 8) & 0xFF) + MaxPos,
+            (sbyte)((this.PackedValue >> 16) & 0xFF) + MaxPos,
+            (sbyte)((this.PackedValue >> 24) & 0xFF) + MaxPos);
+
+        return scaled / ScaledMagnitude;
     }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToUnassociatedScaledVector4() => ToUnassociatedScaledVector4(this);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToAssociatedScaledVector4() => this.ToScaledVector4();
 
     /// <inheritdoc />
     public readonly Vector4 ToVector4() => new(
@@ -76,6 +87,21 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
         (sbyte)((this.PackedValue >> 8) & 0xFF) / MaxPos,
         (sbyte)((this.PackedValue >> 16) & 0xFF) / MaxPos,
         (sbyte)((this.PackedValue >> 24) & 0xFF) / MaxPos);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToUnassociatedVector4()
+    {
+        // Association is defined in the common scaled domain. Signed-native W is an affine encoding of alpha, so it cannot be used as a divisor directly.
+        Vector4 vector = this.ToUnassociatedScaledVector4();
+        vector *= 2F;
+        vector -= Vector4.One;
+        return vector;
+    }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToAssociatedVector4() => this.ToVector4();
 
     /// <inheritdoc />
     public static PixelTypeInfo GetPixelTypeInfo()
@@ -88,15 +114,52 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     public static PixelOperations<NormalizedByte4P> CreatePixelOperations() => new PixelOperations();
 
     /// <inheritdoc />
-    public static NormalizedByte4P FromScaledVector4(Vector4 source)
+    public static NormalizedByte4P FromScaledVector4(Vector4 source) => FromAssociatedScaledVector4(source);
+
+    /// <inheritdoc />
+    public static NormalizedByte4P FromVector4(Vector4 source) => FromAssociatedVector4(source);
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NormalizedByte4P FromUnassociatedVector4(Vector4 source)
     {
-        source *= 2F;
-        source -= Vector4.One;
-        return FromVector4(source);
+        // Convert the signed-native range to the common scaled domain before associating because native W is not opacity.
+        source += Vector4.One;
+        source /= 2F;
+        return FromUnassociatedScaledVector4(source);
     }
 
     /// <inheritdoc />
-    public static NormalizedByte4P FromVector4(Vector4 source) => new() { PackedValue = Pack(source) };
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NormalizedByte4P FromAssociatedVector4(Vector4 source)
+    {
+        // Reassociation must also operate in scaled space so RGB follows the quantized scaled alpha rather than the signed-native W component.
+        source += Vector4.One;
+        source /= 2F;
+        return FromAssociatedScaledVector4(source);
+    }
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NormalizedByte4P FromUnassociatedScaledVector4(Vector4 source) => PackAssociatedScaledVector4(Associate(source));
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static NormalizedByte4P FromAssociatedScaledVector4(Vector4 source) => PackAssociatedScaledVector4(Reassociate(source));
+
+    /// <summary>
+    /// Packs an associated scaled vector into signed-normalized storage.
+    /// </summary>
+    /// <param name="source">The associated scaled vector.</param>
+    /// <returns>The packed pixel.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static NormalizedByte4P PackAssociatedScaledVector4(Vector4 source)
+    {
+        // Signed-normalized storage uses the native [-1, 1] range even though association is defined in scaled opacity space.
+        source *= 2F;
+        source -= Vector4.One;
+        return new() { PackedValue = Pack(source) };
+    }
 
     /// <inheritdoc />
     public static NormalizedByte4P FromAbgr32(Abgr32 source) => FromUnassociatedScaledVector4(source.ToScaledVector4());
@@ -154,13 +217,6 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     }
 
     /// <summary>
-    /// Converts an unassociated scaled vector to associated representation.
-    /// </summary>
-    /// <param name="source">The unassociated scaled vector.</param>
-    /// <returns>The associated pixel.</returns>
-    private static NormalizedByte4P FromUnassociatedScaledVector4(Vector4 source) => FromScaledVector4(Associate(source));
-
-    /// <summary>
     /// Converts an unassociated scaled vector to the associated representation of a signed-normalized-byte destination.
     /// </summary>
     /// <param name="source">The unassociated scaled vector.</param>
@@ -168,6 +224,8 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static Vector4 Associate(Vector4 source)
     {
+        source = Numerics.Clamp(source, Vector4.Zero, Vector4.One);
+
         // Reproduce the signed-normalized packer's alpha quantization, then associate RGB with the exact alpha that will be stored.
         float nativeAlpha = Numerics.Clamp((source.W * 2F) - 1F, -1F, 1F);
         float storedAlpha = MathF.Round(nativeAlpha * MaxPos);
@@ -203,20 +261,6 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     }
 
     /// <summary>
-    /// Converts unassociated scaled vectors to the associated representation of a signed-normalized-byte destination.
-    /// </summary>
-    /// <param name="source">The vectors to convert in place.</param>
-    private static void Associate(Span<Vector4> source)
-    {
-        ref Vector4 sourceBase = ref MemoryMarshal.GetReference(source);
-
-        for (nuint i = 0; i < (uint)source.Length; i++)
-        {
-            Unsafe.Add(ref sourceBase, i) = Associate(Unsafe.Add(ref sourceBase, i));
-        }
-    }
-
-    /// <summary>
     /// Reassociates a scaled vector with the alpha value the destination stores.
     /// </summary>
     /// <param name="source">The associated scaled vector.</param>
@@ -226,7 +270,7 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     {
         float alpha = source.W;
 
-        if (alpha == 0)
+        if (alpha <= 0)
         {
             return Vector4.Zero;
         }
@@ -237,21 +281,8 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
         // Associated RGB scales by the same ratio as alpha. Applying that ratio directly avoids the extra division and multiplication of an unpremultiply/premultiply round trip and preserves exact midpoints when alpha needs no quantization.
         source *= storedAlpha / alpha;
         source.W = storedAlpha;
+        Numerics.ClampRgbToAlpha(ref source);
         return source;
-    }
-
-    /// <summary>
-    /// Reassociates scaled vectors with the alpha values the destination stores.
-    /// </summary>
-    /// <param name="source">The vectors to convert in place.</param>
-    private static void Reassociate(Span<Vector4> source)
-    {
-        ref Vector4 sourceBase = ref MemoryMarshal.GetReference(source);
-
-        for (nuint i = 0; i < (uint)source.Length; i++)
-        {
-            Unsafe.Add(ref sourceBase, i) = Reassociate(Unsafe.Add(ref sourceBase, i));
-        }
     }
 
     /// <summary>

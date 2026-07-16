@@ -7,6 +7,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
+using SixLabors.ImageSharp.Formats.Exr;
 using SixLabors.ImageSharp.Formats.Gif;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Jpeg.Components;
@@ -107,7 +108,9 @@ internal static class AotCompilerTools
             Seed<Rg32>();
             Seed<Rgb24>();
             Seed<Rgb48>();
+            Seed<Rgb96>();
             Seed<Rgba1010102>();
+            Seed<Rgba128>();
             Seed<Rgba32>();
             Seed<Rgba32P>();
             Seed<Rgba64>();
@@ -190,7 +193,9 @@ internal static class AotCompilerTools
         img.CloneAs<Rg32>(default);
         img.CloneAs<Rgb24>(default);
         img.CloneAs<Rgb48>(default);
+        img.CloneAs<Rgb96>(default);
         img.CloneAs<Rgba1010102>(default);
+        img.CloneAs<Rgba128>(default);
         img.CloneAs<Rgba32>(default);
         img.CloneAs<Rgba32P>(default);
         img.CloneAs<Rgba64>(default);
@@ -220,6 +225,7 @@ internal static class AotCompilerTools
         where TPixel : unmanaged, IPixel<TPixel>
     {
         default(BmpEncoderCore).Encode<TPixel>(default, default, default);
+        default(ExrEncoderCore).Encode<TPixel>(default, default, default);
         default(GifEncoderCore).Encode<TPixel>(default, default, default);
         default(JpegEncoderCore).Encode<TPixel>(default, default, default);
         default(PbmEncoderCore).Encode<TPixel>(default, default, default);
@@ -239,6 +245,7 @@ internal static class AotCompilerTools
         where TPixel : unmanaged, IPixel<TPixel>
     {
         default(BmpDecoderCore).Decode<TPixel>(default, default, default);
+        default(ExrDecoderCore).Decode<TPixel>(default, default, default);
         default(GifDecoderCore).Decode<TPixel>(default, default, default);
         default(JpegDecoderCore).Decode<TPixel>(default, default, default);
         default(PbmDecoderCore).Decode<TPixel>(default, default, default);
@@ -259,6 +266,7 @@ internal static class AotCompilerTools
     {
         AotCompileImageEncoder<TPixel, WebpEncoder>();
         AotCompileImageEncoder<TPixel, BmpEncoder>();
+        AotCompileImageEncoder<TPixel, ExrEncoder>();
         AotCompileImageEncoder<TPixel, GifEncoder>();
         AotCompileImageEncoder<TPixel, JpegEncoder>();
         AotCompileImageEncoder<TPixel, PbmEncoder>();
@@ -277,6 +285,7 @@ internal static class AotCompilerTools
     {
         AotCompileImageDecoder<TPixel, WebpDecoder>();
         AotCompileImageDecoder<TPixel, BmpDecoder>();
+        AotCompileImageDecoder<TPixel, ExrDecoder>();
         AotCompileImageDecoder<TPixel, GifDecoder>();
         AotCompileImageDecoder<TPixel, JpegDecoder>();
         AotCompileImageDecoder<TPixel, PbmDecoder>();
@@ -348,6 +357,7 @@ internal static class AotCompilerTools
         AotCompileImageProcessor<TPixel, VignetteProcessor>();
         AotCompileImageProcessor<TPixel, AdaptiveHistogramEqualizationProcessor>();
         AotCompileImageProcessor<TPixel, AdaptiveHistogramEqualizationSlidingWindowProcessor>();
+        AotCompileImageProcessor<TPixel, AutoLevelProcessor>();
         AotCompileImageProcessor<TPixel, GlobalHistogramEqualizationProcessor>();
         AotCompileImageProcessor<TPixel, AchromatomalyProcessor>();
         AotCompileImageProcessor<TPixel, AchromatopsiaProcessor>();
@@ -380,11 +390,13 @@ internal static class AotCompilerTools
         AotCompileImageProcessor<TPixel, PaletteDitherProcessor>();
         AotCompileImageProcessor<TPixel, BokehBlurProcessor>();
         AotCompileImageProcessor<TPixel, BoxBlurProcessor>();
+        AotCompileImageProcessor<TPixel, ConvolutionProcessor>();
         AotCompileImageProcessor<TPixel, EdgeDetector2DProcessor>();
         AotCompileImageProcessor<TPixel, EdgeDetectorCompassProcessor>();
         AotCompileImageProcessor<TPixel, EdgeDetectorProcessor>();
         AotCompileImageProcessor<TPixel, GaussianBlurProcessor>();
         AotCompileImageProcessor<TPixel, GaussianSharpenProcessor>();
+        AotCompileImageProcessor<TPixel, MedianBlurProcessor>();
         AotCompileImageProcessor<TPixel, AdaptiveThresholdProcessor>();
         AotCompileImageProcessor<TPixel, BinaryThresholdProcessor>();
 

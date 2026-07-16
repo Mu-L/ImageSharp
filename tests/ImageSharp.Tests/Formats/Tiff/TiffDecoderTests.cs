@@ -4,6 +4,7 @@
 // ReSharper disable InconsistentNaming
 using System.Runtime.Intrinsics.X86;
 using SixLabors.ImageSharp.Formats;
+using SixLabors.ImageSharp.Formats.Png;
 using SixLabors.ImageSharp.Formats.Tiff;
 using SixLabors.ImageSharp.Metadata;
 using SixLabors.ImageSharp.Metadata.Profiles.Icc;
@@ -390,7 +391,15 @@ public class TiffDecoderTests : TiffDecoderBaseTester
         where TPixel : unmanaged, IPixel<TPixel>
     {
         using Image<TPixel> image = provider.GetImage(TiffDecoder.Instance);
-        image.DebugSave(provider);
+        PngEncoder encoder = new()
+        {
+            BitDepth = PngBitDepth.Bit16,
+            ColorType = PngColorType.RgbWithAlpha
+        };
+
+        // This exact Rgba64 comparison requires a 16-bit reference. The Windows reference encoder uses a 32-bit
+        // System.Drawing bitmap and would otherwise quantize each channel to 8 bits while producing the PNG.
+        image.DebugSave(provider, testOutputDetails: null, extension: "png", encoder: encoder);
 
         image.CompareToReferenceOutput(ImageComparer.Exact, provider);
     }

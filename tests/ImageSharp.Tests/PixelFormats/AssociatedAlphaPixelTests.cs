@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Tests.TestUtilities;
 
 namespace SixLabors.ImageSharp.Tests.PixelFormats;
 
@@ -119,6 +120,153 @@ public class NormalizedByte4PTests : AssociatedAlphaPixelTests<NormalizedByte4P>
 
         Assert.Equal(new NormalizedByte4(associated).PackedValue, new NormalizedByte4P(associated).PackedValue);
     }
+
+    [Fact]
+    public void AssociatedScaledVectorsMatchUnassociatedVectorsWithinTwoUlpsForEveryValidComponentAndAlpha()
+    {
+        for (int alpha = 0; alpha < byte.MaxValue; alpha++)
+        {
+            for (int associated = 0; associated <= alpha; associated++)
+            {
+                uint component = (byte)(associated - 127);
+                uint alphaComponent = (byte)(alpha - 127);
+                NormalizedByte4P pixel = new() { PackedValue = component | (component << 8) | (component << 16) | (alphaComponent << 24) };
+                Vector4 expected = pixel.ToUnassociatedScaledVector4();
+                expected.X *= expected.W;
+                expected.Y *= expected.W;
+                expected.Z *= expected.W;
+                Vector4 actual = pixel.ToAssociatedScaledVector4();
+
+                // All 32,640 valid storage pairs are covered. Two ULP is the measured maximum from the independently ordered division and multiplication.
+                AlphaRepresentationTestAssertions.EqualWithinTwoUlps(expected, actual);
+                Assert.Equal(BitConverter.SingleToInt32Bits(expected.W), BitConverter.SingleToInt32Bits(actual.W));
+            }
+        }
+    }
+
+    [Fact]
+    public void BulkConversionsMatchScalarAcrossHardwareWidths() =>
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(
+            AssertBulkConversionsMatchScalar,
+            HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
+
+    private static void AssertBulkConversionsMatchScalar()
+    {
+        // Values immediately below, at, and above each vector width force every hardware regime through its vector body and scalar tail.
+        int[] lengths = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 259];
+        AssociatedAlphaPixelOperations<NormalizedByte4P> operations = (AssociatedAlphaPixelOperations<NormalizedByte4P>)PixelOperations<NormalizedByte4P>.Instance;
+
+        foreach (int length in lengths)
+        {
+            NormalizedByte4P[] pixels = new NormalizedByte4P[length];
+            Vector4[] expectedNative = new Vector4[length];
+            Vector4[] expectedAssociatedNative = new Vector4[length];
+            Vector4[] expectedAssociatedScaled = new Vector4[length];
+            Vector4[] expectedUnassociatedNative = new Vector4[length];
+            Vector4[] expectedUnassociatedScaled = new Vector4[length];
+            Vector4[] actualNative = new Vector4[length];
+            Vector4[] actualAssociatedNative = new Vector4[length];
+            Vector4[] actualAssociatedScaled = new Vector4[length];
+            Vector4[] actualUnassociatedNative = new Vector4[length];
+            Vector4[] actualUnassociatedScaled = new Vector4[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                pixels[i].PackedValue = (uint)((byte)(i * 37 + 128) | ((byte)(i * 73 + 64) << 8) | ((byte)(i * 109 + 192) << 16) | ((byte)(i * 151 + 128) << 24));
+                expectedNative[i] = pixels[i].ToVector4();
+                expectedAssociatedNative[i] = pixels[i].ToAssociatedVector4();
+                expectedAssociatedScaled[i] = pixels[i].ToAssociatedScaledVector4();
+                expectedUnassociatedNative[i] = pixels[i].ToUnassociatedVector4();
+                expectedUnassociatedScaled[i] = pixels[i].ToUnassociatedScaledVector4();
+            }
+
+            if (length > 0)
+            {
+                // PackedValue permits every signed byte pattern. Explicit -128 components ensure bulk sign extension matches scalar decoding even though the packer emits no -128 values.
+                pixels[0].PackedValue = 0x80808080;
+                expectedNative[0] = pixels[0].ToVector4();
+                expectedAssociatedNative[0] = pixels[0].ToAssociatedVector4();
+                expectedAssociatedScaled[0] = pixels[0].ToAssociatedScaledVector4();
+                expectedUnassociatedNative[0] = pixels[0].ToUnassociatedVector4();
+                expectedUnassociatedScaled[0] = pixels[0].ToUnassociatedScaledVector4();
+            }
+
+            operations.ToVector4(Configuration.Default, pixels, actualNative, PixelConversionModifiers.None);
+            operations.ToVector4(Configuration.Default, pixels, actualAssociatedNative, PixelConversionModifiers.Premultiply);
+            operations.ToVector4(Configuration.Default, pixels, actualAssociatedScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.Premultiply);
+            operations.ToVector4(Configuration.Default, pixels, actualUnassociatedNative, PixelConversionModifiers.UnPremultiply);
+            operations.ToVector4(Configuration.Default, pixels, actualUnassociatedScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.UnPremultiply);
+
+            Assert.Equal(expectedNative, actualNative);
+            Assert.Equal(expectedAssociatedNative, actualAssociatedNative);
+            Assert.Equal(expectedAssociatedScaled, actualAssociatedScaled);
+            Assert.Equal(expectedUnassociatedNative, actualUnassociatedNative);
+            Assert.Equal(expectedUnassociatedScaled, actualUnassociatedScaled);
+
+            Vector4[] unassociatedScaled = new Vector4[length];
+            Vector4[] associatedScaled = new Vector4[length];
+            Vector4[] unassociatedNative = new Vector4[length];
+            Vector4[] associatedNative = new Vector4[length];
+            NormalizedByte4P[] expectedFromUnassociatedNative = new NormalizedByte4P[length];
+            NormalizedByte4P[] expectedFromAssociatedNative = new NormalizedByte4P[length];
+            NormalizedByte4P[] expectedFromUnassociatedScaled = new NormalizedByte4P[length];
+            NormalizedByte4P[] expectedFromAssociatedScaled = new NormalizedByte4P[length];
+            NormalizedByte4P[] actualFromUnassociatedNative = new NormalizedByte4P[length];
+            NormalizedByte4P[] actualFromAssociatedNative = new NormalizedByte4P[length];
+            NormalizedByte4P[] actualFromUnassociatedScaled = new NormalizedByte4P[length];
+            NormalizedByte4P[] actualFromAssociatedScaled = new NormalizedByte4P[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                float alpha = ((i * 151) % 1021) / 1020F;
+                unassociatedScaled[i] = new Vector4(((i * 37) % 1021) / 1020F, ((i * 73) % 1021) / 1020F, ((i * 109) % 1021) / 1020F, alpha);
+                associatedScaled[i] = new Vector4(unassociatedScaled[i].X * alpha, unassociatedScaled[i].Y * alpha, unassociatedScaled[i].Z * alpha, alpha);
+
+                // Signed-native formats encode the common scaled domain over [-1, 1], so native inputs must be derived before invoking the native entry points.
+                unassociatedNative[i] = (unassociatedScaled[i] * 2F) - Vector4.One;
+                associatedNative[i] = (associatedScaled[i] * 2F) - Vector4.One;
+                expectedFromUnassociatedNative[i] = NormalizedByte4P.FromUnassociatedVector4(unassociatedNative[i]);
+                expectedFromAssociatedNative[i] = NormalizedByte4P.FromAssociatedVector4(associatedNative[i]);
+                expectedFromUnassociatedScaled[i] = NormalizedByte4P.FromUnassociatedScaledVector4(unassociatedScaled[i]);
+                expectedFromAssociatedScaled[i] = NormalizedByte4P.FromAssociatedScaledVector4(associatedScaled[i]);
+            }
+
+            Vector4[] unassociatedNativeSource = [.. unassociatedNative];
+            Vector4[] associatedNativeSource = [.. associatedNative];
+            Vector4[] unassociatedScaledSource = [.. unassociatedScaled];
+            Vector4[] associatedScaledSource = [.. associatedScaled];
+
+            operations.FromVector4Destructive(Configuration.Default, unassociatedNativeSource, actualFromUnassociatedNative, PixelConversionModifiers.UnPremultiply);
+            operations.FromVector4Destructive(Configuration.Default, associatedNativeSource, actualFromAssociatedNative, PixelConversionModifiers.Premultiply);
+            operations.FromVector4Destructive(Configuration.Default, unassociatedScaledSource, actualFromUnassociatedScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.UnPremultiply);
+            operations.FromVector4Destructive(Configuration.Default, associatedScaledSource, actualFromAssociatedScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.Premultiply);
+
+            Assert.Equal(expectedFromUnassociatedNative, actualFromUnassociatedNative);
+            Assert.Equal(expectedFromAssociatedNative, actualFromAssociatedNative);
+            Assert.Equal(expectedFromUnassociatedScaled, actualFromUnassociatedScaled);
+            Assert.Equal(expectedFromAssociatedScaled, actualFromAssociatedScaled);
+
+            NormalizedByte4P[] expectedFromNative = new NormalizedByte4P[length];
+            NormalizedByte4P[] expectedFromScaled = new NormalizedByte4P[length];
+            NormalizedByte4P[] actualFromNative = new NormalizedByte4P[length];
+            NormalizedByte4P[] actualFromScaled = new NormalizedByte4P[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                expectedFromNative[i] = NormalizedByte4P.FromVector4(expectedNative[i]);
+                expectedFromScaled[i] = NormalizedByte4P.FromScaledVector4(expectedAssociatedScaled[i]);
+            }
+
+            Vector4[] actualNativeSource = [.. expectedNative];
+            Vector4[] actualScaledSource = [.. expectedAssociatedScaled];
+
+            operations.FromVector4Destructive(Configuration.Default, actualNativeSource, actualFromNative, PixelConversionModifiers.None);
+            operations.FromVector4Destructive(Configuration.Default, actualScaledSource, actualFromScaled, PixelConversionModifiers.Scale);
+
+            Assert.Equal(expectedFromNative, actualFromNative);
+            Assert.Equal(expectedFromScaled, actualFromScaled);
+        }
+    }
 }
 
 /// <summary>
@@ -155,6 +303,183 @@ public class HalfVector4PTests : AssociatedAlphaPixelTests<HalfVector4P>
         Assert.Equal(expected, color.ToPixel<HalfVector4P>());
         Assert.Equal(source.ToScaledVector4(), bulkColors[0].ToScaledVector4());
         Assert.Equal(expected, bulkColors[0].ToPixel<HalfVector4P>());
+    }
+
+    [Fact]
+    public void BulkConversionsMatchScalarAcrossHardwareWidths() =>
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(
+            AssertBulkConversionsMatchScalar,
+            HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
+
+    private static void AssertBulkConversionsMatchScalar()
+    {
+        AssertEveryHalfBitPatternUnpacksExactly();
+        AssertHalfPackingMatchesScalar();
+        AssertAlphaConversionsMatchScalar();
+    }
+
+    private static void AssertEveryHalfBitPatternUnpacksExactly()
+    {
+        HalfVector4P[] pixels = new HalfVector4P[(ushort.MaxValue + 1) / 4];
+        Vector4[] expectedNative = new Vector4[pixels.Length];
+        Vector4[] expectedScaled = new Vector4[pixels.Length];
+        Vector4[] actualNative = new Vector4[pixels.Length];
+        Vector4[] actualScaled = new Vector4[pixels.Length];
+
+        for (int i = 0; i < pixels.Length; i++)
+        {
+            ulong x = (ushort)(i * 4);
+            ulong y = (ushort)((i * 4) + 1);
+            ulong z = (ushort)((i * 4) + 2);
+            ulong w = (ushort)((i * 4) + 3);
+            pixels[i].PackedValue = x | (y << 16) | (z << 32) | (w << 48);
+            expectedNative[i] = pixels[i].ToVector4();
+            expectedScaled[i] = pixels[i].ToScaledVector4();
+        }
+
+        PixelOperations<HalfVector4P>.Instance.ToVector4(Configuration.Default, pixels, actualNative, PixelConversionModifiers.None);
+        PixelOperations<HalfVector4P>.Instance.ToVector4(Configuration.Default, pixels, actualScaled, PixelConversionModifiers.Scale);
+
+        AssertVectorBitsEqual(expectedNative, actualNative);
+        AssertVectorBitsEqual(expectedScaled, actualScaled);
+    }
+
+    private static void AssertHalfPackingMatchesScalar()
+    {
+        const int finitePositiveHalfCount = 0x7BFF;
+        const int distributedFloatCount = ushort.MaxValue + 1;
+        const int componentCount = (ushort.MaxValue + 1) + (finitePositiveHalfCount * 2) + distributedFloatCount + 2;
+        Vector4[] source = new Vector4[componentCount / 4];
+        Span<float> components = MemoryMarshal.Cast<Vector4, float>(source);
+        int index = 0;
+
+        for (int bits = 0; bits <= ushort.MaxValue; bits++)
+        {
+            components[index++] = (float)BitConverter.UInt16BitsToHalf((ushort)bits);
+        }
+
+        for (int bits = 0; bits < finitePositiveHalfCount; bits++)
+        {
+            float lower = (float)BitConverter.UInt16BitsToHalf((ushort)bits);
+            float upper = (float)BitConverter.UInt16BitsToHalf((ushort)(bits + 1));
+
+            // Every midpoint exercises binary16 round-to-nearest-even; negating it covers the symmetric sign path.
+            float midpoint = (lower + upper) * .5F;
+            components[index++] = midpoint;
+            components[index++] = -midpoint;
+        }
+
+        // Equal high and low words distribute samples across the complete binary32 sign, exponent, and fraction space.
+        for (uint bits = 0; bits <= ushort.MaxValue; bits++)
+        {
+            components[index++] = BitConverter.UInt32BitsToSingle(bits * 0x0001_0001U);
+        }
+
+        // The two padding components also verify finite overflow in both directions.
+        components[index++] = float.MaxValue;
+        components[index] = float.MinValue;
+
+        HalfVector4P[] expected = new HalfVector4P[source.Length];
+        HalfVector4P[] actual = new HalfVector4P[source.Length];
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            expected[i] = HalfVector4P.FromVector4(source[i]);
+        }
+
+        Vector4[] destructiveSource = [.. source];
+
+        PixelOperations<HalfVector4P>.Instance.FromVector4Destructive(Configuration.Default, destructiveSource, actual, PixelConversionModifiers.None);
+
+        Assert.Equal(expected, actual);
+    }
+
+    private static void AssertAlphaConversionsMatchScalar()
+    {
+        // Values immediately below, at, and above each vector width force every hardware regime through its vector body and scalar tail.
+        int[] lengths = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 259];
+        AssociatedAlphaPixelOperations<HalfVector4P> operations = (AssociatedAlphaPixelOperations<HalfVector4P>)PixelOperations<HalfVector4P>.Instance;
+
+        foreach (int length in lengths)
+        {
+            Vector4[] unassociatedScaled = new Vector4[length];
+            Vector4[] associatedScaled = new Vector4[length];
+            Vector4[] unassociatedNative = new Vector4[length];
+            Vector4[] associatedNative = new Vector4[length];
+            HalfVector4P[] expectedFromUnassociatedNative = new HalfVector4P[length];
+            HalfVector4P[] expectedFromAssociatedNative = new HalfVector4P[length];
+            HalfVector4P[] expectedFromUnassociatedScaled = new HalfVector4P[length];
+            HalfVector4P[] expectedFromAssociatedScaled = new HalfVector4P[length];
+            HalfVector4P[] actualFromUnassociatedNative = new HalfVector4P[length];
+            HalfVector4P[] actualFromAssociatedNative = new HalfVector4P[length];
+            HalfVector4P[] actualFromUnassociatedScaled = new HalfVector4P[length];
+            HalfVector4P[] actualFromAssociatedScaled = new HalfVector4P[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                float alpha = ((i * 151) % 4093) / 4092F;
+                unassociatedScaled[i] = new Vector4(((i * 37) % 4093) / 4092F, ((i * 73) % 4093) / 4092F, ((i * 109) % 4093) / 4092F, alpha);
+                associatedScaled[i] = new Vector4(unassociatedScaled[i].X * alpha, unassociatedScaled[i].Y * alpha, unassociatedScaled[i].Z * alpha, alpha);
+
+                // HalfVector4's native domain is [-1, 1], so the native entry points need the affine encoding of the common scaled values.
+                unassociatedNative[i] = (unassociatedScaled[i] * 2F) - Vector4.One;
+                associatedNative[i] = (associatedScaled[i] * 2F) - Vector4.One;
+                expectedFromUnassociatedNative[i] = HalfVector4P.FromUnassociatedVector4(unassociatedNative[i]);
+                expectedFromAssociatedNative[i] = HalfVector4P.FromAssociatedVector4(associatedNative[i]);
+                expectedFromUnassociatedScaled[i] = HalfVector4P.FromUnassociatedScaledVector4(unassociatedScaled[i]);
+                expectedFromAssociatedScaled[i] = HalfVector4P.FromAssociatedScaledVector4(associatedScaled[i]);
+            }
+
+            Vector4[] unassociatedNativeSource = [.. unassociatedNative];
+            Vector4[] associatedNativeSource = [.. associatedNative];
+            Vector4[] unassociatedScaledSource = [.. unassociatedScaled];
+            Vector4[] associatedScaledSource = [.. associatedScaled];
+
+            operations.FromVector4Destructive(Configuration.Default, unassociatedNativeSource, actualFromUnassociatedNative, PixelConversionModifiers.UnPremultiply);
+            operations.FromVector4Destructive(Configuration.Default, associatedNativeSource, actualFromAssociatedNative, PixelConversionModifiers.Premultiply);
+            operations.FromVector4Destructive(Configuration.Default, unassociatedScaledSource, actualFromUnassociatedScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.UnPremultiply);
+            operations.FromVector4Destructive(Configuration.Default, associatedScaledSource, actualFromAssociatedScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.Premultiply);
+
+            Assert.Equal(expectedFromUnassociatedNative, actualFromUnassociatedNative);
+            Assert.Equal(expectedFromAssociatedNative, actualFromAssociatedNative);
+            Assert.Equal(expectedFromUnassociatedScaled, actualFromUnassociatedScaled);
+            Assert.Equal(expectedFromAssociatedScaled, actualFromAssociatedScaled);
+
+            Vector4[] expectedAssociatedNative = new Vector4[length];
+            Vector4[] expectedAssociatedScaled = new Vector4[length];
+            Vector4[] expectedUnassociatedNative = new Vector4[length];
+            Vector4[] expectedUnassociatedScaled = new Vector4[length];
+            Vector4[] actualAssociatedNative = new Vector4[length];
+            Vector4[] actualAssociatedScaled = new Vector4[length];
+            Vector4[] actualUnassociatedNative = new Vector4[length];
+            Vector4[] actualUnassociatedScaled = new Vector4[length];
+
+            for (int i = 0; i < length; i++)
+            {
+                expectedAssociatedNative[i] = expectedFromAssociatedScaled[i].ToAssociatedVector4();
+                expectedAssociatedScaled[i] = expectedFromAssociatedScaled[i].ToAssociatedScaledVector4();
+                expectedUnassociatedNative[i] = expectedFromAssociatedScaled[i].ToUnassociatedVector4();
+                expectedUnassociatedScaled[i] = expectedFromAssociatedScaled[i].ToUnassociatedScaledVector4();
+            }
+
+            operations.ToVector4(Configuration.Default, expectedFromAssociatedScaled, actualAssociatedNative, PixelConversionModifiers.Premultiply);
+            operations.ToVector4(Configuration.Default, expectedFromAssociatedScaled, actualAssociatedScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.Premultiply);
+            operations.ToVector4(Configuration.Default, expectedFromAssociatedScaled, actualUnassociatedNative, PixelConversionModifiers.UnPremultiply);
+            operations.ToVector4(Configuration.Default, expectedFromAssociatedScaled, actualUnassociatedScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.UnPremultiply);
+
+            AssertVectorBitsEqual(expectedAssociatedNative, actualAssociatedNative);
+            AssertVectorBitsEqual(expectedAssociatedScaled, actualAssociatedScaled);
+            AssertVectorBitsEqual(expectedUnassociatedNative, actualUnassociatedNative);
+            AssertVectorBitsEqual(expectedUnassociatedScaled, actualUnassociatedScaled);
+        }
+    }
+
+    private static void AssertVectorBitsEqual(ReadOnlySpan<Vector4> expected, ReadOnlySpan<Vector4> actual)
+    {
+        ReadOnlySpan<uint> expectedBits = MemoryMarshal.Cast<Vector4, uint>(expected);
+        ReadOnlySpan<uint> actualBits = MemoryMarshal.Cast<Vector4, uint>(actual);
+
+        Assert.Equal(expectedBits.ToArray(), actualBits.ToArray());
     }
 }
 
@@ -196,20 +521,77 @@ public class AssociatedAlphaPackedPixelConversionTests
     [Fact]
     public void Abgr32PScalarAndBulkFromAssociatedVectorsAreEqual() => AssertScalarAndBulkFromAssociatedVectorsAreEqual<Abgr32P>();
 
+    [Fact]
+    public void Rgba32PScalarAndBulkUnassociatedVectorsAreEqual() => AssertScalarAndBulkUnassociatedVectorsAreEqual((r, g, b, a) => new Rgba32P(r, g, b, a));
+
+    [Fact]
+    public void Bgra32PScalarAndBulkUnassociatedVectorsAreEqual() => AssertScalarAndBulkUnassociatedVectorsAreEqual((r, g, b, a) => new Bgra32P(r, g, b, a));
+
+    [Fact]
+    public void Argb32PScalarAndBulkUnassociatedVectorsAreEqual() => AssertScalarAndBulkUnassociatedVectorsAreEqual((r, g, b, a) => new Argb32P(r, g, b, a));
+
+    [Fact]
+    public void Abgr32PScalarAndBulkUnassociatedVectorsAreEqual() => AssertScalarAndBulkUnassociatedVectorsAreEqual((r, g, b, a) => new Abgr32P(r, g, b, a));
+
+    [Fact]
+    public void Rgba32PScalarAndBulkFromUnassociatedVectorsAreEqual() => AssertScalarAndBulkFromUnassociatedVectorsAreEqual<Rgba32P>();
+
+    [Fact]
+    public void Bgra32PScalarAndBulkFromUnassociatedVectorsAreEqual() => AssertScalarAndBulkFromUnassociatedVectorsAreEqual<Bgra32P>();
+
+    [Fact]
+    public void Argb32PScalarAndBulkFromUnassociatedVectorsAreEqual() => AssertScalarAndBulkFromUnassociatedVectorsAreEqual<Argb32P>();
+
+    [Fact]
+    public void Abgr32PScalarAndBulkFromUnassociatedVectorsAreEqual() => AssertScalarAndBulkFromUnassociatedVectorsAreEqual<Abgr32P>();
+
+    [Fact]
+    public void BulkConversionsMatchScalarAcrossHardwareWidths()
+    {
+        // RemoteExecutor resolves the delegate by method name alone, so its entry point must not share the generic worker's name.
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(
+            AssertPackedBulkConversionsMatchScalar,
+            HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
+
+    }
+
+    private static void AssertPackedBulkConversionsMatchScalar()
+    {
+        AssertBulkConversionsMatchScalar((r, g, b, a) => new Rgba32P(r, g, b, a));
+        AssertBulkConversionsMatchScalar((r, g, b, a) => new Bgra32P(r, g, b, a));
+        AssertBulkConversionsMatchScalar((r, g, b, a) => new Argb32P(r, g, b, a));
+        AssertBulkConversionsMatchScalar((r, g, b, a) => new Abgr32P(r, g, b, a));
+    }
+
+    private static void AssertBulkConversionsMatchScalar<TPixel>(Func<byte, byte, byte, byte, TPixel> createPixel)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        AssertScalarAndBulkAssociatedVectorsAreEqual(createPixel);
+        AssertScalarAndBulkFromAssociatedVectorsAreEqual<TPixel>();
+        AssertScalarAndBulkUnassociatedVectorsAreEqual(createPixel);
+        AssertScalarAndBulkFromUnassociatedVectorsAreEqual<TPixel>();
+    }
+
     private static void AssertLosslessRoundTrip<TIntermediate>()
         where TIntermediate : unmanaged, IPixel<TIntermediate>
     {
-        Rgba32P[] expected = new Rgba32P[byte.MaxValue * 4 + 4];
+        const int componentAlphaPairCount = ((byte.MaxValue + 1) * (byte.MaxValue + 2)) / 2;
+        const int colorChannelCount = 3;
+        Rgba32P[] expected = new Rgba32P[componentAlphaPairCount * colorChannelCount];
         TIntermediate[] intermediate = new TIntermediate[expected.Length];
         Rgba32P[] actual = new Rgba32P[expected.Length];
+        int index = 0;
 
-        for (int component = 0; component <= byte.MaxValue; component++)
+        // Every component/alpha pair in the valid associated-byte domain must survive a layout
+        // conversion exactly. Exercising each color lane also catches an incorrect channel map.
+        for (int alpha = 0; alpha <= byte.MaxValue; alpha++)
         {
-            int index = component * 4;
-            expected[index] = new Rgba32P((byte)component, 0, 0, byte.MaxValue);
-            expected[index + 1] = new Rgba32P(0, (byte)component, 0, byte.MaxValue);
-            expected[index + 2] = new Rgba32P(0, 0, (byte)component, byte.MaxValue);
-            expected[index + 3] = new Rgba32P(0, 0, 0, (byte)component);
+            for (int component = 0; component <= alpha; component++)
+            {
+                expected[index++] = new Rgba32P((byte)component, 0, 0, (byte)alpha);
+                expected[index++] = new Rgba32P(0, (byte)component, 0, (byte)alpha);
+                expected[index++] = new Rgba32P(0, 0, (byte)component, (byte)alpha);
+            }
         }
 
         PixelOperations<TIntermediate>.Instance.From<Rgba32P>(Configuration.Default, expected, intermediate);
@@ -226,47 +608,152 @@ public class AssociatedAlphaPackedPixelConversionTests
     private static void AssertScalarAndBulkAssociatedVectorsAreEqual<TPixel>(Func<byte, byte, byte, byte, TPixel> createPixel)
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        TPixel[] pixels = new TPixel[byte.MaxValue * 4 + 4];
-        Vector4[] actual = new Vector4[pixels.Length];
+        // Prefixes straddle every vector width; the final length also preserves exhaustive byte-component coverage and adds a scalar tail.
+        int[] lengths = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 259, byte.MaxValue * 4 + 5];
+        TPixel[] source = new TPixel[lengths[^1]];
+        AssociatedAlphaPixelOperations<TPixel> operations = (AssociatedAlphaPixelOperations<TPixel>)PixelOperations<TPixel>.Instance;
 
         for (int component = 0; component <= byte.MaxValue; component++)
         {
             int index = component * 4;
-            pixels[index] = createPixel((byte)component, 0, 0, byte.MaxValue);
-            pixels[index + 1] = createPixel(0, (byte)component, 0, byte.MaxValue);
-            pixels[index + 2] = createPixel(0, 0, (byte)component, byte.MaxValue);
-            pixels[index + 3] = createPixel(0, 0, 0, (byte)component);
+            source[index] = createPixel((byte)component, 0, 0, byte.MaxValue);
+            source[index + 1] = createPixel(0, (byte)component, 0, byte.MaxValue);
+            source[index + 2] = createPixel(0, 0, (byte)component, byte.MaxValue);
+            source[index + 3] = createPixel(0, 0, 0, (byte)component);
         }
 
-        PixelOperations<TPixel>.Instance.ToAssociatedScaledVector4(Configuration.Default, pixels, actual);
+        source[^1] = createPixel(37, 73, 109, 151);
 
-        for (int i = 0; i < pixels.Length; i++)
+        foreach (int length in lengths)
         {
-            Assert.Equal(pixels[i].ToScaledVector4(), actual[i]);
+            ReadOnlySpan<TPixel> pixels = source.AsSpan(0, length);
+            Vector4[] expectedNative = new Vector4[length];
+            Vector4[] expectedScaled = new Vector4[length];
+            Vector4[] actualNative = new Vector4[length];
+            Vector4[] actualScaled = new Vector4[length];
+
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                expectedNative[i] = pixels[i].ToAssociatedVector4();
+                expectedScaled[i] = pixels[i].ToAssociatedScaledVector4();
+            }
+
+            operations.ToVector4(Configuration.Default, pixels, actualNative, PixelConversionModifiers.Premultiply);
+            operations.ToVector4(Configuration.Default, pixels, actualScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.Premultiply);
+
+            Assert.Equal(expectedNative, actualNative);
+            Assert.Equal(expectedScaled, actualScaled);
         }
     }
 
     private static void AssertScalarAndBulkFromAssociatedVectorsAreEqual<TPixel>()
         where TPixel : unmanaged, IPixel<TPixel>
     {
-        const int count = 259;
-        Vector4[] vectors = new Vector4[count];
-        TPixel[] expected = new TPixel[count];
-        TPixel[] actual = new TPixel[count];
+        // Values immediately below, at, and above each vector width force every hardware regime through its vector body and scalar tail.
+        int[] lengths = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 259];
+        Vector4[] source = new Vector4[lengths[^1]];
         AssociatedAlphaPixelOperations<TPixel> operations = (AssociatedAlphaPixelOperations<TPixel>)PixelOperations<TPixel>.Instance;
 
-        for (int i = 0; i < vectors.Length; i++)
+        for (int i = 0; i < source.Length; i++)
         {
-            // Alternating exact byte alpha values with fractional values covers both reassociation branches. The odd length also exercises the SIMD remainder.
+            // Alternating exact byte alpha values with fractional values covers both reassociation branches.
             float alpha = (i & 1) == 0 ? (i % 256) / 255F : ((i % 255) + .375F) / 255F;
-            vectors[i] = new Vector4(((i * 37) % 256) / 255F, ((i * 73) % 256) / 255F, ((i * 109) % 256) / 255F, 1F) * alpha;
-            vectors[i].W = alpha;
-            expected[i] = operations.FromAssociatedScaledVector4(vectors[i]);
+            source[i] = new Vector4(((i * 37) % 256) / 255F, ((i * 73) % 256) / 255F, ((i * 109) % 256) / 255F, 1F) * alpha;
+            source[i].W = alpha;
         }
 
-        operations.FromAssociatedScaledVector4(Configuration.Default, vectors, actual);
+        foreach (int length in lengths)
+        {
+            Vector4[] nativeSource = source.AsSpan(0, length).ToArray();
+            Vector4[] scaledSource = source.AsSpan(0, length).ToArray();
+            TPixel[] expectedNative = new TPixel[length];
+            TPixel[] expectedScaled = new TPixel[length];
+            TPixel[] actualNative = new TPixel[length];
+            TPixel[] actualScaled = new TPixel[length];
 
-        Assert.Equal(expected, actual);
+            for (int i = 0; i < length; i++)
+            {
+                expectedNative[i] = TPixel.FromAssociatedVector4(nativeSource[i]);
+                expectedScaled[i] = TPixel.FromAssociatedScaledVector4(scaledSource[i]);
+            }
+
+            operations.FromVector4Destructive(Configuration.Default, nativeSource, actualNative, PixelConversionModifiers.Premultiply);
+            operations.FromVector4Destructive(Configuration.Default, scaledSource, actualScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.Premultiply);
+
+            Assert.Equal(expectedNative, actualNative);
+            Assert.Equal(expectedScaled, actualScaled);
+        }
+    }
+
+    private static void AssertScalarAndBulkUnassociatedVectorsAreEqual<TPixel>(Func<byte, byte, byte, byte, TPixel> createPixel)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        int[] lengths = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 259];
+        AssociatedAlphaPixelOperations<TPixel> operations = (AssociatedAlphaPixelOperations<TPixel>)PixelOperations<TPixel>.Instance;
+
+        foreach (int length in lengths)
+        {
+            TPixel[] pixels = new TPixel[length];
+            Vector4[] expectedNative = new Vector4[length];
+            Vector4[] expectedScaled = new Vector4[length];
+            Vector4[] actualNative = new Vector4[length];
+            Vector4[] actualScaled = new Vector4[length];
+
+            for (int i = 0; i < pixels.Length; i++)
+            {
+                // Independent component sequences exercise every packed layout across each SIMD width and remainder.
+                pixels[i] = createPixel((byte)((i * 37) % 256), (byte)((i * 73) % 256), (byte)((i * 109) % 256), (byte)((i * 151) % 256));
+                expectedNative[i] = pixels[i].ToUnassociatedVector4();
+                expectedScaled[i] = pixels[i].ToUnassociatedScaledVector4();
+            }
+
+            if (length > 0)
+            {
+                // A zero-alpha pixel with stored RGB verifies the converter's defined zero-divisor behavior outside the lossless straight-color round-trip domain.
+                pixels[0] = createPixel(37, 73, 109, 0);
+                expectedNative[0] = pixels[0].ToUnassociatedVector4();
+                expectedScaled[0] = pixels[0].ToUnassociatedScaledVector4();
+            }
+
+            operations.ToVector4(Configuration.Default, pixels, actualNative, PixelConversionModifiers.UnPremultiply);
+            operations.ToVector4(Configuration.Default, pixels, actualScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.UnPremultiply);
+
+            Assert.Equal(expectedNative, actualNative);
+            Assert.Equal(expectedScaled, actualScaled);
+        }
+    }
+
+    private static void AssertScalarAndBulkFromUnassociatedVectorsAreEqual<TPixel>()
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        int[] lengths = [0, 1, 2, 3, 4, 5, 7, 8, 9, 15, 16, 17, 259];
+        AssociatedAlphaPixelOperations<TPixel> operations = (AssociatedAlphaPixelOperations<TPixel>)PixelOperations<TPixel>.Instance;
+
+        foreach (int length in lengths)
+        {
+            Vector4[] vectors = new Vector4[length];
+            TPixel[] expectedNative = new TPixel[length];
+            TPixel[] expectedScaled = new TPixel[length];
+            TPixel[] actualNative = new TPixel[length];
+            TPixel[] actualScaled = new TPixel[length];
+
+            for (int i = 0; i < vectors.Length; i++)
+            {
+                // Fractional alpha values verify destination-alpha quantization across each SIMD width and remainder.
+                vectors[i] = new Vector4(((i * 37) % 1021) / 1020F, ((i * 73) % 1021) / 1020F, ((i * 109) % 1021) / 1020F, ((i * 151) % 1021) / 1020F);
+                expectedNative[i] = TPixel.FromUnassociatedVector4(vectors[i]);
+                expectedScaled[i] = TPixel.FromUnassociatedScaledVector4(vectors[i]);
+            }
+
+            Vector4[] nativeSource = [.. vectors];
+            Vector4[] scaledSource = [.. vectors];
+
+            operations.FromVector4Destructive(Configuration.Default, nativeSource, actualNative, PixelConversionModifiers.UnPremultiply);
+            operations.FromVector4Destructive(Configuration.Default, scaledSource, actualScaled, PixelConversionModifiers.Scale | PixelConversionModifiers.UnPremultiply);
+
+            Assert.Equal(expectedNative, actualNative);
+            Assert.Equal(expectedScaled, actualScaled);
+        }
     }
 }
 
@@ -380,11 +867,12 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
     }
 
     [Fact]
-    public void Rgba32PToRgba32ScalarRoundTripPreservesEveryValidAssociatedComponent()
+    public void Rgba32PToRgba32ScalarRoundTripPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
     {
         for (int alpha = 0; alpha <= byte.MaxValue; alpha++)
         {
-            // Associated components greater than alpha are invalid, so the exhaustive domain is triangular rather than 256 squared.
+            // Components greater than alpha are valid for additive blending but cannot round-trip losslessly through an 8-bit unassociated pixel.
+            // The exhaustive lossless domain is therefore triangular rather than 256 squared.
             for (int associated = 0; associated <= alpha; associated++)
             {
                 // This integer expression is the exact nearest 8-bit unassociated value for associated * 255 / alpha.
@@ -402,7 +890,7 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
     }
 
     [Fact]
-    public void ColorFromRgba32PPreservesEveryValidAssociatedComponent()
+    public void ColorFromRgba32PPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
     {
         const int pairCount = 32896;
         Rgba32P[] sourcePixels = new Rgba32P[pairCount];
@@ -432,23 +920,23 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
     }
 
     [Fact]
-    public void Rgba32PToBgra32RoundTripPreservesEveryValidAssociatedComponent()
+    public void Rgba32PToBgra32RoundTripPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
         => AssertUnsignedByteBulkRoundTrip((red, green, blue, alpha) => new Rgba32P(red, green, blue, alpha));
 
     [Fact]
-    public void Bgra32PToBgra32RoundTripPreservesEveryValidAssociatedComponent()
+    public void Bgra32PToBgra32RoundTripPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
         => AssertUnsignedByteBulkRoundTrip((red, green, blue, alpha) => new Bgra32P(red, green, blue, alpha));
 
     [Fact]
-    public void Argb32PToBgra32RoundTripPreservesEveryValidAssociatedComponent()
+    public void Argb32PToBgra32RoundTripPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
         => AssertUnsignedByteBulkRoundTrip((red, green, blue, alpha) => new Argb32P(red, green, blue, alpha));
 
     [Fact]
-    public void Abgr32PToBgra32RoundTripPreservesEveryValidAssociatedComponent()
+    public void Abgr32PToBgra32RoundTripPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
         => AssertUnsignedByteBulkRoundTrip((red, green, blue, alpha) => new Abgr32P(red, green, blue, alpha));
 
     [Fact]
-    public void NormalizedByte4PToRgba32ScalarRoundTripPreservesEveryValidAssociatedComponent()
+    public void NormalizedByte4PToRgba32ScalarRoundTripPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
     {
         for (int alpha = 0; alpha < byte.MaxValue; alpha++)
         {
@@ -468,7 +956,7 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
     }
 
     [Fact]
-    public void ColorFromNormalizedByte4PPreservesEveryValidAssociatedComponent()
+    public void ColorFromNormalizedByte4PPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
     {
         const int pairCount = 32640;
         NormalizedByte4P[] sourcePixels = new NormalizedByte4P[pairCount];
@@ -499,7 +987,7 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
     }
 
     [Fact]
-    public void NormalizedByte4PToBgra32RoundTripPreservesEveryValidAssociatedComponent()
+    public void NormalizedByte4PToBgra32RoundTripPreservesEveryLosslesslyRoundTrippableAssociatedComponent()
     {
         const int pairCount = 32640;
         const int channelCount = 3;
@@ -554,7 +1042,8 @@ public class AssociatedToUnassociatedPackedPixelConversionTests
 
         for (int alpha = 0; alpha <= byte.MaxValue; alpha++)
         {
-            // Associated components greater than alpha are invalid, so the exhaustive domain is triangular rather than 256 squared.
+            // Components greater than alpha are valid for additive blending but cannot round-trip losslessly through an 8-bit unassociated pixel.
+            // The exhaustive lossless domain is therefore triangular rather than 256 squared.
             for (int associated = 0; associated <= alpha; associated++)
             {
                 // This integer expression is the exact nearest 8-bit unassociated value for associated * 255 / alpha.

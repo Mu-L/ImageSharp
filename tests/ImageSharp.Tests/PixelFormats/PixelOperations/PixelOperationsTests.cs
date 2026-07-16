@@ -161,9 +161,30 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
     [MemberData(nameof(ArraySizesData))]
     public void FromCompandedScaledVector4(int count)
     {
-        void SourceAction(ref Vector4 v) => v = SRgbCompanding.Expand(v);
+        void SourceAction(ref Vector4 v)
+        {
+            v = SRgbCompanding.Expand(v);
 
-        void ExpectedAction(ref Vector4 v) => v = SRgbCompanding.Compress(v);
+            if (this.HasAssociatedAlpha)
+            {
+                Numerics.Premultiply(ref v);
+            }
+        }
+
+        void ExpectedAction(ref Vector4 v)
+        {
+            if (this.HasAssociatedAlpha)
+            {
+                Numerics.UnPremultiply(ref v);
+            }
+
+            v = SRgbCompanding.Compress(v);
+
+            if (this.HasAssociatedAlpha)
+            {
+                Numerics.Premultiply(ref v);
+            }
+        }
 
         Vector4[] source = CreateVector4TestData(count, SourceAction);
         TPixel[] expected = CreateScaledExpectedPixelData(source, ExpectedAction);
@@ -183,24 +204,16 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
     [MemberData(nameof(ArraySizesData))]
     public void FromPremultipliedVector4(int count)
     {
-        void SourceAction(ref Vector4 v)
-        {
-            if (!this.HasAssociatedAlpha)
-            {
-                Numerics.Premultiply(ref v);
-            }
-        }
+        Vector4[] source = CreateVector4TestData(count);
+        TPixel[] expected = new TPixel[count];
 
-        void ExpectedAction(ref Vector4 v)
+        for (int i = 0; i < source.Length; i++)
         {
-            if (!this.HasAssociatedAlpha)
-            {
-                Numerics.UnPremultiply(ref v);
-            }
+            // Native W is not necessarily opacity. Use the per-pixel representation contract to create and consume associated-native vectors.
+            TPixel pixel = TPixel.FromUnassociatedVector4(source[i]);
+            source[i] = pixel.ToAssociatedVector4();
+            expected[i] = TPixel.FromAssociatedVector4(source[i]);
         }
-
-        Vector4[] source = CreateVector4TestData(count, (ref Vector4 v) => SourceAction(ref v));
-        TPixel[] expected = CreateExpectedPixelData(source, (ref Vector4 v) => ExpectedAction(ref v));
 
         TestOperation(
             source,
@@ -258,21 +271,18 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
         void SourceAction(ref Vector4 v)
         {
             v = SRgbCompanding.Expand(v);
-
-            if (!this.HasAssociatedAlpha)
-            {
-                Numerics.Premultiply(ref v);
-            }
+            Numerics.Premultiply(ref v);
         }
 
         void ExpectedAction(ref Vector4 v)
         {
-            if (!this.HasAssociatedAlpha)
-            {
-                Numerics.UnPremultiply(ref v);
-            }
-
+            Numerics.UnPremultiply(ref v);
             v = SRgbCompanding.Compress(v);
+
+            if (this.HasAssociatedAlpha)
+            {
+                Numerics.Premultiply(ref v);
+            }
         }
 
         Vector4[] source = CreateVector4TestData(count, SourceAction);
@@ -381,9 +391,26 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
     {
         void SourceAction(ref Vector4 v)
         {
+            if (this.HasAssociatedAlpha)
+            {
+                Numerics.Premultiply(ref v);
+            }
         }
 
-        void ExpectedAction(ref Vector4 v) => v = SRgbCompanding.Expand(v);
+        void ExpectedAction(ref Vector4 v)
+        {
+            if (this.HasAssociatedAlpha)
+            {
+                Numerics.UnPremultiply(ref v);
+            }
+
+            v = SRgbCompanding.Expand(v);
+
+            if (this.HasAssociatedAlpha)
+            {
+                Numerics.Premultiply(ref v);
+            }
+        }
 
         TPixel[] source = CreateScaledPixelTestData(count, SourceAction);
         Vector4[] expected = CreateExpectedScaledVector4Data(source, ExpectedAction);
@@ -402,20 +429,14 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
     [MemberData(nameof(ArraySizesData))]
     public void ToPremultipliedVector4(int count)
     {
-        void SourceAction(ref Vector4 v)
-        {
-        }
+        TPixel[] source = CreatePixelTestData(count);
+        Vector4[] expected = new Vector4[count];
 
-        void ExpectedAction(ref Vector4 v)
+        for (int i = 0; i < source.Length; i++)
         {
-            if (!this.HasAssociatedAlpha)
-            {
-                Numerics.Premultiply(ref v);
-            }
+            // Association is defined by the pixel format because native W can be affine or integer-valued rather than normalized opacity.
+            expected[i] = source[i].ToAssociatedVector4();
         }
-
-        TPixel[] source = CreatePixelTestData(count, SourceAction);
-        Vector4[] expected = CreateExpectedVector4Data(source, ExpectedAction);
 
         TestOperation(
             source,
@@ -458,16 +479,21 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
     {
         void SourceAction(ref Vector4 v)
         {
+            if (this.HasAssociatedAlpha)
+            {
+                Numerics.Premultiply(ref v);
+            }
         }
 
         void ExpectedAction(ref Vector4 v)
         {
-            v = SRgbCompanding.Expand(v);
-
-            if (!this.HasAssociatedAlpha)
+            if (this.HasAssociatedAlpha)
             {
-                Numerics.Premultiply(ref v);
+                Numerics.UnPremultiply(ref v);
             }
+
+            v = SRgbCompanding.Expand(v);
+            Numerics.Premultiply(ref v);
         }
 
         TPixel[] source = CreateScaledPixelTestData(count, SourceAction);
@@ -1086,9 +1112,8 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
         return expected;
     }
 
-    private static Vector4 ToUnassociatedScaledVector4(TPixel source)
-        // The scalar conversion boundary owns representation-specific rounding. Byte-export tests compare each bulk operation with that scalar result.
-        => PixelOperations<TPixel>.Instance.ToUnassociatedScaledVector4(source);
+    // The scalar conversion boundary owns representation-specific rounding. Byte-export tests compare each bulk operation with that scalar result.
+    private static Vector4 ToUnassociatedScaledVector4(TPixel source) => source.ToUnassociatedScaledVector4();
 
     internal static void TestOperation<TSource, TDest>(
         TSource[] source,
