@@ -371,10 +371,8 @@ internal static partial class Vector4Converters
 
             float byteAlpha = alpha * byte.MaxValue;
             float storedAlpha = (byte)Numerics.Clamp(byteAlpha + 0.5F, 0, byte.MaxValue);
-            byte quantizedAlpha = (byte)storedAlpha;
-            byte sourceAlphaByte = (byte)Numerics.Clamp(byteAlpha + 0.5F, 0, byte.MaxValue);
 
-            if (sourceAlphaByte == quantizedAlpha)
+            if (byteAlpha == storedAlpha)
             {
                 // Quantization leaves alpha unchanged, so RGB is already associated correctly. Avoiding division preserves exact byte midpoints produced by scaling stored components.
                 source *= byte.MaxValue;
