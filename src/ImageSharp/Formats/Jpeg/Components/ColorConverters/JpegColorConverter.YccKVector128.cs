@@ -58,9 +58,9 @@ internal abstract partial class JpegColorConverterBase
                 // r = y + (1.402F * cr);
                 // g = y - (0.344136F * cb) - (0.714136F * cr);
                 // b = y + (1.772F * cb);
-                Vector128<float> r = Vector128_.MultiplyAdd(y, cr, rCrMult);
-                Vector128<float> g = Vector128_.MultiplyAdd(Vector128_.MultiplyAdd(y, cb, gCbMult), cr, gCrMult);
-                Vector128<float> b = Vector128_.MultiplyAdd(y, cb, bCbMult);
+                Vector128<float> r = Vector128_.MultiplyAddEstimate(cr, rCrMult, y);
+                Vector128<float> g = Vector128_.MultiplyAddEstimate(cr, gCrMult, Vector128_.MultiplyAddEstimate(cb, gCbMult, y));
+                Vector128<float> b = Vector128_.MultiplyAddEstimate(cb, bCbMult, y);
 
                 r = max - Vector128_.RoundToNearestInteger(r);
                 g = max - Vector128_.RoundToNearestInteger(g);
@@ -122,9 +122,9 @@ internal abstract partial class JpegColorConverterBase
                 // y  =   0 + (0.299 * r) + (0.587 * g) + (0.114 * b)
                 // cb = 128 - (0.168736 * r) - (0.331264 * g) + (0.5 * b)
                 // cr = 128 + (0.5 * r) - (0.418688 * g) - (0.081312 * b)
-                Vector128<float> y = Vector128_.MultiplyAdd(Vector128_.MultiplyAdd(f0114 * b, f0587, g), f0299, r);
-                Vector128<float> cb = chromaOffset + Vector128_.MultiplyAdd(Vector128_.MultiplyAdd(f05 * b, fn0331264, g), fn0168736, r);
-                Vector128<float> cr = chromaOffset + Vector128_.MultiplyAdd(Vector128_.MultiplyAdd(fn0081312F * b, fn0418688, g), f05, r);
+                Vector128<float> y = Vector128_.MultiplyAddEstimate(f0299, r, Vector128_.MultiplyAddEstimate(f0587, g, f0114 * b));
+                Vector128<float> cb = chromaOffset + Vector128_.MultiplyAddEstimate(fn0168736, r, Vector128_.MultiplyAddEstimate(fn0331264, g, f05 * b));
+                Vector128<float> cr = chromaOffset + Vector128_.MultiplyAddEstimate(f05, r, Vector128_.MultiplyAddEstimate(fn0418688, g, fn0081312F * b));
 
                 Unsafe.Add(ref destY, i) = y;
                 Unsafe.Add(ref destCb, i) = cb;

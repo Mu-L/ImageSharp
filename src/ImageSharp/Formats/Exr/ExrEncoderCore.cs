@@ -206,7 +206,9 @@ internal sealed class ExrEncoderCore
                 Span<TPixel> pixelRowSpan = pixels.DangerousGetRowSpan((int)rowIndex);
                 for (int x = 0; x < width; x++)
                 {
-                    Vector4 vector4 = pixelRowSpan[x].ToVector4();
+                    // OpenEXR stores RGB associated with alpha. Use the native vector domain so floating-point and HDR component
+                    // ranges are preserved instead of being clamped through the scaled [0, 1] representation.
+                    Vector4 vector4 = pixelRowSpan[x].ToAssociatedVector4();
                     redBuffer[x] = vector4.X;
                     greenBuffer[x] = vector4.Y;
                     blueBuffer[x] = vector4.Z;
@@ -303,7 +305,8 @@ internal sealed class ExrEncoderCore
                 Span<TPixel> pixelRowSpan = pixels.DangerousGetRowSpan((int)rowIndex);
                 for (int x = 0; x < width; x++)
                 {
-                    Vector4 vector4 = pixelRowSpan[x].ToVector4();
+                    // OpenEXR channels use associated alpha; the native vector conversion also preserves the integer channel range.
+                    Vector4 vector4 = pixelRowSpan[x].ToAssociatedVector4();
                     rgb = Rgba128.FromVector4(vector4);
 
                     redBuffer[x] = rgb.R;

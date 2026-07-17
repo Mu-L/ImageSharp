@@ -142,7 +142,8 @@ internal abstract class HistogramEqualizationProcessor<TPixel> : ImageProcessor<
     public static int GetLuminance(TPixel sourcePixel, int luminanceLevels)
     {
         // TODO: We need a bulk per span equivalent.
-        Vector4 vector = sourcePixel.ToVector4();
-        return ColorNumerics.GetBT709Luminance(ref vector, luminanceLevels);
+        // Histogram bins describe logical color, so storage alpha association must not scale luminance.
+        Vector4 vector = sourcePixel.ToUnassociatedScaledVector4();
+        return ColorNumerics.GetBT709Luminance(vector, luminanceLevels);
     }
 }
