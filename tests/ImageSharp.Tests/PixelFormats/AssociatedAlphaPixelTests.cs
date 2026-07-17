@@ -354,7 +354,7 @@ public class HalfVector4PTests : AssociatedAlphaPixelTests<HalfVector4P>
         const int distributedFloatCount = ushort.MaxValue + 1;
         const int componentCount = (ushort.MaxValue + 1) + (finitePositiveHalfCount * 2) + distributedFloatCount + 2;
         Vector4[] source = new Vector4[componentCount / 4];
-        Span<float> components = MemoryMarshal.Cast<Vector4, float>(source);
+        Span<float> components = MemoryMarshal.Cast<Vector4, float>(source.AsSpan());
         int index = 0;
 
         for (int bits = 0; bits <= ushort.MaxValue; bits++)
