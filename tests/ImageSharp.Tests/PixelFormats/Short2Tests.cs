@@ -4,6 +4,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Tests.TestUtilities;
 
 namespace SixLabors.ImageSharp.Tests.PixelFormats;
 
@@ -63,7 +64,12 @@ public class Short2Tests
     }
 
     [Fact]
-    public void Short2_BulkScaledConversionsCoverFullSignedRange()
+    public void Short2_BulkScaledConversionsCoverFullSignedRange() =>
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(
+            AssertShort2BulkScaledConversionsCoverFullSignedRange,
+            HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
+
+    private static void AssertShort2BulkScaledConversionsCoverFullSignedRange()
     {
         const int length = 17;
         Short2[] source = new Short2[length];

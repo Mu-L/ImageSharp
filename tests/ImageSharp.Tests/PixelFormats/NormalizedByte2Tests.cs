@@ -4,6 +4,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Tests.TestUtilities;
 
 namespace SixLabors.ImageSharp.Tests.PixelFormats;
 
@@ -30,7 +31,12 @@ public class NormalizedByte2Tests
     }
 
     [Fact]
-    public void NormalizedByte2_MinimumStorageCodeDecodesAsNegativeOne()
+    public void NormalizedByte2_MinimumStorageCodeDecodesAsNegativeOne() =>
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(
+            AssertNormalizedByte2MinimumStorageCodeDecodesAsNegativeOne,
+            HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
+
+    private static void AssertNormalizedByte2MinimumStorageCodeDecodesAsNegativeOne()
     {
         NormalizedByte2 pixel = new() { PackedValue = 0x8080 };
         Vector4 expectedNative = new(-1F, -1F, 0F, 1F);

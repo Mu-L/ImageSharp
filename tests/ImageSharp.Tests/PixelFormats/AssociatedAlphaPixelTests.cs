@@ -395,7 +395,25 @@ public class HalfVector4PTests : AssociatedAlphaPixelTests<HalfVector4P>
 
         PixelOperations<HalfVector4P>.Instance.FromVector4Destructive(Configuration.Default, destructiveSource, actual, PixelConversionModifiers.None);
 
-        Assert.Equal(expected, actual);
+        for (int i = 0; i < expected.Length; i++)
+        {
+            for (int component = 0; component < 4; component++)
+            {
+                int shift = component * 16;
+                ushort expectedBits = (ushort)(expected[i].PackedValue >> shift);
+                ushort actualBits = (ushort)(actual[i].PackedValue >> shift);
+
+                // Association performs floating-point arithmetic before packing. IEEE 754 requires a NaN result but does not specify which operand's payload survives that arithmetic.
+                if (Half.IsNaN(BitConverter.UInt16BitsToHalf(expectedBits)))
+                {
+                    Assert.True(Half.IsNaN(BitConverter.UInt16BitsToHalf(actualBits)), $"Pixel {i}, component {component} should be NaN.");
+                }
+                else
+                {
+                    Assert.Equal(expectedBits, actualBits);
+                }
+            }
+        }
     }
 
     private static void AssertAlphaConversionsMatchScalar()

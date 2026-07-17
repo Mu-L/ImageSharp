@@ -100,6 +100,10 @@ internal static partial class Vector4Converters
 
             int count = source.Length;
 
+            // Source defines the conversion length. Do not expose spare destination capacity
+            // to downstream shuffles whose scalar tail is destination-length driven.
+            destination = destination[..count];
+
             // Not worth for small buffers:
             if (count < Vector4ConversionThreshold)
             {

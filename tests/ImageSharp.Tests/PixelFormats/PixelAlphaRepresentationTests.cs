@@ -5,6 +5,7 @@ using System.Numerics;
 using SixLabors.ImageSharp.ColorProfiles.Companding;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Tests;
+using SixLabors.ImageSharp.Tests.TestUtilities;
 
 namespace SixLabors.ImageSharp.Tests.PixelFormats;
 
@@ -305,6 +306,58 @@ public abstract class PixelAlphaRepresentationTests<TPixel>
     private delegate void BulkToVector4(PixelOperations<TPixel> operations, ReadOnlySpan<TPixel> source, Span<Vector4> destination);
 
     private delegate void BulkFromVector4(PixelOperations<TPixel> operations, Span<Vector4> source, Span<TPixel> destination);
+}
+
+/// <summary>
+/// Verifies the shared bulk vector conversion used by RGB byte formats.
+/// </summary>
+[Trait("Category", "PixelFormats")]
+public class RgbaCompatiblePixelOperationsTests
+{
+    [Fact]
+    public void BulkConversionsMatchScalarAcrossHardwareWidths() =>
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(
+            AssertBulkConversionsMatchScalar,
+            HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
+
+    private static void AssertBulkConversionsMatchScalar()
+    {
+        AssertBulkConversionsMatchScalarForPixel<Bgr24>();
+        AssertBulkConversionsMatchScalarForPixel<Rgb24>();
+    }
+
+    private static void AssertBulkConversionsMatchScalarForPixel<TPixel>()
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        const int length = 259;
+        Vector4 sourceVector = new(.5F, .25F, .125F, 1F);
+        TPixel expectedPixel = TPixel.FromUnassociatedScaledVector4(sourceVector);
+        TPixel[] pixels = new TPixel[length];
+        Array.Fill(pixels, expectedPixel);
+
+        Vector4 expectedVector = expectedPixel.ToUnassociatedScaledVector4();
+        Vector4 vectorSentinel = new(.125F, .5F, .75F, 1F);
+        Vector4[] vectors = new Vector4[length + 3];
+        vectors.AsSpan(length).Fill(vectorSentinel);
+
+        PixelOperations<TPixel>.Instance.ToVector4(Configuration.Default, pixels, vectors, PixelConversionModifiers.Scale | PixelConversionModifiers.UnPremultiply);
+
+        Assert.All(vectors[..length], vector => Assert.Equal(expectedVector, vector));
+        Assert.All(vectors[length..], vector => Assert.Equal(vectorSentinel, vector));
+
+        Vector4[] source = new Vector4[length];
+        source.AsSpan().Fill(sourceVector);
+
+        TPixel pixelSentinel = TPixel.FromUnassociatedScaledVector4(vectorSentinel);
+        TPixel[] destination = new TPixel[length + 3];
+        destination.AsSpan(length).Fill(pixelSentinel);
+
+        PixelOperations<TPixel>.Instance.FromVector4Destructive(Configuration.Default, source, destination, PixelConversionModifiers.Scale | PixelConversionModifiers.UnPremultiply);
+
+        // A 259-pixel source crosses the 128- and 256-bit optimized thresholds while leaving spare destination capacity to detect writes beyond the source length.
+        Assert.All(destination[..length], pixel => Assert.Equal(expectedPixel, pixel));
+        Assert.All(destination[length..], pixel => Assert.Equal(pixelSentinel, pixel));
+    }
 }
 
 /// <summary>

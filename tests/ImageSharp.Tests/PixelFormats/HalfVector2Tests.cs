@@ -4,6 +4,7 @@
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.PixelFormats;
+using SixLabors.ImageSharp.Tests.TestUtilities;
 
 namespace SixLabors.ImageSharp.Tests.PixelFormats;
 
@@ -61,7 +62,12 @@ public class HalfVector2Tests
     }
 
     [Fact]
-    public void HalfVector2_BulkScaledConversionsCoverFiniteRange()
+    public void HalfVector2_BulkScaledConversionsCoverFiniteRange() =>
+        FeatureTestRunner.RunWithHwIntrinsicsFeature(
+            AssertHalfVector2BulkScaledConversionsCoverFiniteRange,
+            HwIntrinsics.AllowAll | HwIntrinsics.DisableAVX512F | HwIntrinsics.DisableAVX | HwIntrinsics.DisableHWIntrinsic);
+
+    private static void AssertHalfVector2BulkScaledConversionsCoverFiniteRange()
     {
         HalfVector2 pixel = new() { PackedValue = 0x7BFF_FBFF };
         HalfVector2[] source = new HalfVector2[17];
