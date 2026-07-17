@@ -649,7 +649,7 @@ internal sealed class ExrDecoderCore : ImageDecoderCore
         this.Channels = this.HeaderAttributes.Channels;
         this.Compression = this.HeaderAttributes.Compression;
         uint rowsPerBlock = ExrUtils.RowsPerBlock(this.Compression);
-        long chunkCount = (this.Height + (long)rowsPerBlock - 1) / rowsPerBlock;
+        long chunkCount = (this.Height + rowsPerBlock - 1) / rowsPerBlock;
         long offsetTableByteCount = chunkCount * sizeof(ulong);
 
         // The scanline offset table sits between the header and pixel chunks; proving it
