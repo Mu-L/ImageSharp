@@ -7,11 +7,12 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.PixelFormats;
 
 /// <summary>
-/// Packed pixel type containing two 16-bit unsigned normalized values ranging from 0 to 1.
-/// <para>
-/// Ranges from [0, 0, 0, 1] to [1, 1, 0, 1] in vector form.
-/// </para>
+/// Packed pixel type containing two 16-bit unsigned normalized values.
 /// </summary>
+/// <remarks>
+/// <see cref="ToVector2"/>, <see cref="ToVector4"/>, and scaled vector conversions return x and y in <c>[0, 1]</c>, z
+/// as <c>0</c>, and implicit alpha as <c>1</c>. The packed storage layout matches <c>DXGI_FORMAT_R16G16_UNORM</c>.
+/// </remarks>
 public partial struct Rg32 : IPixel<Rg32>, IPackedVector<uint>
 {
     private static readonly Vector2 Max = new(ushort.MaxValue);

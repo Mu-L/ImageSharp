@@ -34,6 +34,37 @@ public class NormalizedShort2Tests
     }
 
     [Fact]
+    public void NormalizedShort2_MinimumStorageCodeDecodesAsNegativeOne()
+    {
+        NormalizedShort2 pixel = new() { PackedValue = 0x80008000 };
+        Vector4 expectedNative = new(-1F, -1F, 0F, 1F);
+        Vector4 expectedScaled = new(0F, 0F, 0F, 1F);
+
+        Assert.Equal(expectedNative, pixel.ToVector4());
+        Assert.Equal(expectedScaled, pixel.ToScaledVector4());
+
+        NormalizedShort2[] source = new NormalizedShort2[17];
+        Vector4[] native = new Vector4[source.Length];
+        Vector4[] scaled = new Vector4[source.Length];
+        Array.Fill(source, pixel);
+
+        PixelOperations<NormalizedShort2>.Instance.ToVector4(Configuration.Default, source, native);
+        PixelOperations<NormalizedShort2>.Instance.ToVector4(Configuration.Default, source, scaled, PixelConversionModifiers.Scale);
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            Assert.Equal(expectedNative, native[i]);
+            Assert.Equal(expectedScaled, scaled[i]);
+        }
+
+        Vector4[] destructiveSource = new Vector4[source.Length];
+        Array.Fill(destructiveSource, expectedScaled);
+        NormalizedShort2[] actualPixels = new NormalizedShort2[source.Length];
+        PixelOperations<NormalizedShort2>.Instance.FromVector4Destructive(Configuration.Default, destructiveSource, actualPixels, PixelConversionModifiers.Scale);
+        Assert.All(actualPixels, actual => Assert.Equal(0x80018001U, actual.PackedValue));
+    }
+
+    [Fact]
     public void NormalizedShort2_ToVector4()
     {
         Assert.Equal(new Vector4(1, 1, 0, 1), new NormalizedShort2(Vector2.One).ToVector4());

@@ -8,11 +8,12 @@ using System.Runtime.Intrinsics;
 namespace SixLabors.ImageSharp.PixelFormats;
 
 /// <summary>
-/// Packed pixel type containing four 8-bit unsigned integer values, ranging from 0 to 255.
-/// <para>
-/// Ranges from [0, 0, 0, 0] to [255, 255, 255, 255] in vector form.
-/// </para>
+/// Packed pixel type containing four 8-bit unsigned integer values.
 /// </summary>
+/// <remarks>
+/// <see cref="ToVector4"/> returns components in <c>[0, 255]</c>. Scaled vector conversions map that range to
+/// <c>[0, 1]</c>. The storage layout matches <c>DXGI_FORMAT_R8G8B8A8_UINT</c>.
+/// </remarks>
 public partial struct Byte4 : IPixel<Byte4>, IPackedVector<uint>
 {
     private static readonly Vector4 MaxBytes = Vector128.Create(255f).AsVector4();

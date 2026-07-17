@@ -17,8 +17,8 @@ public partial struct Short4
     /// </summary>
     internal class PixelOperations : PixelOperations<Short4>
     {
-        private static readonly Vector4 NativeOffset = new(MaxPos);
-        private static readonly Vector4 NativeMagnitude = new(MaxPos * 2F);
+        private static readonly Vector4 NativeOffset = new(-MinNeg);
+        private static readonly Vector4 NativeMagnitude = new(Range);
 
         /// <inheritdoc />
         protected override void ToUnassociatedVector4(Configuration configuration, ReadOnlySpan<Short4> source, Span<Vector4> destination)

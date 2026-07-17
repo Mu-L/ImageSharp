@@ -102,6 +102,35 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
         return expected;
     }
 
+    /// <summary>
+    /// Creates the scalar oracle for companded scaled input.
+    /// </summary>
+    /// <param name="source">The source vectors.</param>
+    /// <param name="associated">Whether the source vectors use associated alpha.</param>
+    /// <returns>The converted pixels.</returns>
+    internal static TPixel[] CreateCompandedExpectedPixelData(Vector4[] source, bool associated)
+    {
+        TPixel[] expected = new TPixel[source.Length];
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            Vector4 vector = source[i];
+
+            if (associated)
+            {
+                Numerics.UnPremultiply(ref vector);
+            }
+
+            vector = SRgbCompanding.Compress(vector);
+
+            // Transfer functions operate on straight RGB. Let the destination pixel perform any required association so its stored
+            // alpha quantization participates exactly once, matching the public bulk conversion contract.
+            expected[i] = TPixel.FromUnassociatedScaledVector4(vector);
+        }
+
+        return expected;
+    }
+
     [Fact]
     public void PixelTypeInfoHasCorrectBitsPerPixel()
     {
@@ -171,23 +200,8 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
             }
         }
 
-        void ExpectedAction(ref Vector4 v)
-        {
-            if (this.HasAssociatedAlpha)
-            {
-                Numerics.UnPremultiply(ref v);
-            }
-
-            v = SRgbCompanding.Compress(v);
-
-            if (this.HasAssociatedAlpha)
-            {
-                Numerics.Premultiply(ref v);
-            }
-        }
-
         Vector4[] source = CreateVector4TestData(count, SourceAction);
-        TPixel[] expected = CreateScaledExpectedPixelData(source, ExpectedAction);
+        TPixel[] expected = CreateCompandedExpectedPixelData(source, this.HasAssociatedAlpha);
 
         TestOperation(
             source,
@@ -274,19 +288,8 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
             Numerics.Premultiply(ref v);
         }
 
-        void ExpectedAction(ref Vector4 v)
-        {
-            Numerics.UnPremultiply(ref v);
-            v = SRgbCompanding.Compress(v);
-
-            if (this.HasAssociatedAlpha)
-            {
-                Numerics.Premultiply(ref v);
-            }
-        }
-
         Vector4[] source = CreateVector4TestData(count, SourceAction);
-        TPixel[] expected = CreateScaledExpectedPixelData(source, ExpectedAction);
+        TPixel[] expected = CreateCompandedExpectedPixelData(source, true);
 
         TestOperation(
             source,
@@ -349,6 +352,8 @@ public abstract class PixelOperationsTests<TPixel> : MeasureFixture
         new TestPixel<Rgba32>(),
         new TestPixel<Rgba32P>(),
         new TestPixel<Rgba64>(),
+        new TestPixel<RgbaHalf>(),
+        new TestPixel<RgbaHalfP>(),
         new TestPixel<RgbaVector>(),
         new TestPixel<Short2>(),
         new TestPixel<Short4>(),

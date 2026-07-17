@@ -16,8 +16,8 @@ public partial struct Short2
     /// </summary>
     internal class PixelOperations : PixelOperations<Short2>
     {
-        private static readonly Vector4 NativeOffset = new(MaxPos, MaxPos, 0F, 0F);
-        private static readonly Vector4 NativeDivisor = new(MaxPos * 2F, MaxPos * 2F, 1F, 1F);
+        private static readonly Vector4 NativeOffset = new(-MinNeg, -MinNeg, 0F, 0F);
+        private static readonly Vector4 NativeRange = new(Range, Range, 1F, 1F);
 
         // Alpha is implicitly one, so both outward representations already contain associated color components.
 
@@ -32,7 +32,7 @@ public partial struct Short2
         {
             // X and Y use signed-native coordinates while incoming W remains normalized alpha. Map only the stored components before
             // the scaled bulk path unassociates RGB; transforming W would change the opacity that must be removed.
-            Vector4Converters.AddThenDivide(source, NativeOffset, NativeDivisor);
+            Vector4Converters.AddThenDivide(source, NativeOffset, NativeRange);
             this.FromAssociatedScaledVector4Destructive(configuration, source, destination);
         }
     }

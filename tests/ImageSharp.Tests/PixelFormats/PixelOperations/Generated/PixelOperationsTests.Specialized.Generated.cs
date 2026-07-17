@@ -492,6 +492,36 @@ public partial class PixelOperationsTests
         }
     }
 
+    public partial class RgbaHalf_OperationsTests : PixelOperationsTests<RgbaHalf>
+    {
+        public RgbaHalf_OperationsTests(ITestOutputHelper output)
+            : base(output)
+        {
+        }
+
+        [Fact]
+        public void PixelTypeInfoHasCorrectAlphaRepresentation()
+        {
+            var alphaRepresentation = RgbaHalf.GetPixelTypeInfo().AlphaRepresentation;
+            Assert.Equal(PixelAlphaRepresentation.Unassociated, alphaRepresentation);
+        }
+    }
+
+    public partial class RgbaHalfP_OperationsTests : PixelOperationsTests<RgbaHalfP>
+    {
+        public RgbaHalfP_OperationsTests(ITestOutputHelper output)
+            : base(output)
+        {
+        }
+
+        [Fact]
+        public void PixelTypeInfoHasCorrectAlphaRepresentation()
+        {
+            var alphaRepresentation = RgbaHalfP.GetPixelTypeInfo().AlphaRepresentation;
+            Assert.Equal(PixelAlphaRepresentation.Associated, alphaRepresentation);
+        }
+    }
+
     public partial class RgbaVector_OperationsTests : PixelOperationsTests<RgbaVector>
     {
         public RgbaVector_OperationsTests(ITestOutputHelper output)

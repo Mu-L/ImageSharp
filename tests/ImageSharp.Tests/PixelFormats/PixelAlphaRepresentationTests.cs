@@ -308,7 +308,7 @@ public abstract class PixelAlphaRepresentationTests<TPixel>
 }
 
 /// <summary>
-/// Verifies alpha conversion for formats whose native vector space differs from scaled color space.
+/// Verifies alpha conversion for formats with distinct native vector contracts.
 /// </summary>
 [Trait("Category", "PixelFormats")]
 public class AffineNativeAlphaRepresentationTests
@@ -321,7 +321,7 @@ public class AffineNativeAlphaRepresentationTests
 
     [Fact]
     public void Short4NativeConversionsUseScaledAlpha()
-        => AssertNativeConversions<Short4>(static vector => (vector * 65534F) - new Vector4(32767F));
+        => AssertNativeConversions<Short4>(static vector => (vector * ushort.MaxValue) - new Vector4(32768F));
 
     [Fact]
     public void NormalizedByte4NativeConversionsUseScaledAlpha()
@@ -337,19 +337,19 @@ public class AffineNativeAlphaRepresentationTests
 
     [Fact]
     public void HalfVector4NativeConversionsUseScaledAlpha()
-        => AssertNativeConversions<HalfVector4>(static vector => (vector * 2F) - Vector4.One);
+        => AssertNativeConversions<HalfVector4>(static vector => (vector * 131008F) - new Vector4(65504F));
 
     [Fact]
     public void HalfVector4PNativeConversionsUseScaledAlpha()
-        => AssertNativeConversions<HalfVector4P>(static vector => (vector * 2F) - Vector4.One);
+        => AssertNativeConversions<HalfVector4P>(static vector => (vector * 131008F) - new Vector4(65504F));
 
     [Fact]
     public void HalfSingleFromAssociatedNativeVectorUsesScaledAlpha()
-        => AssertAlphaLessNativeFrom<HalfSingle>(static vector => new Vector4((vector.X * 2F) - 1F, 0F, 0F, vector.W));
+        => AssertAlphaLessNativeFrom<HalfSingle>(static vector => new Vector4((vector.X * 131008F) - 65504F, 0F, 0F, vector.W));
 
     [Fact]
     public void HalfVector2FromAssociatedNativeVectorUsesScaledAlpha()
-        => AssertAlphaLessNativeFrom<HalfVector2>(static vector => new Vector4((vector.X * 2F) - 1F, (vector.Y * 2F) - 1F, 0F, vector.W));
+        => AssertAlphaLessNativeFrom<HalfVector2>(static vector => new Vector4((vector.X * 131008F) - 65504F, (vector.Y * 131008F) - 65504F, 0F, vector.W));
 
     [Fact]
     public void NormalizedByte2FromAssociatedNativeVectorUsesScaledAlpha()
@@ -361,7 +361,7 @@ public class AffineNativeAlphaRepresentationTests
 
     [Fact]
     public void Short2FromAssociatedNativeVectorUsesScaledAlpha()
-        => AssertAlphaLessNativeFrom<Short2>(static vector => new Vector4((vector.X * 65534F) - 32767F, (vector.Y * 65534F) - 32767F, 0F, vector.W));
+        => AssertAlphaLessNativeFrom<Short2>(static vector => new Vector4((vector.X * ushort.MaxValue) - 32768F, (vector.Y * ushort.MaxValue) - 32768F, 0F, vector.W));
 
     private static void AssertNativeConversions<TPixel>(Func<Vector4, Vector4> encodeNative)
         where TPixel : unmanaged, IPixel<TPixel>
@@ -486,6 +486,8 @@ public class Rgba1010102AlphaRepresentationTests : PixelAlphaRepresentationTests
 public class Rgba128AlphaRepresentationTests : PixelAlphaRepresentationTests<Rgba128> { }
 public class Rgba32AlphaRepresentationTests : PixelAlphaRepresentationTests<Rgba32> { }
 public class Rgba32PAlphaRepresentationTests : PixelAlphaRepresentationTests<Rgba32P> { }
+public class RgbaHalfAlphaRepresentationTests : PixelAlphaRepresentationTests<RgbaHalf> { }
+public class RgbaHalfPAlphaRepresentationTests : PixelAlphaRepresentationTests<RgbaHalfP> { }
 public class Rgba64AlphaRepresentationTests : PixelAlphaRepresentationTests<Rgba64> { }
 public class RgbaVectorAlphaRepresentationTests : PixelAlphaRepresentationTests<RgbaVector> { }
 public class Short2AlphaRepresentationTests : PixelAlphaRepresentationTests<Short2> { }

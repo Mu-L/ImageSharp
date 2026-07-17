@@ -17,7 +17,9 @@ internal static class SignedShort4PixelOperations
 {
     private const byte RestorePackedPixelOrder = 0b_11_01_10_00;
     private const float ShortMaximum = short.MaxValue;
-    private const float ShortMagnitude = ShortMaximum * 2F;
+    private const float SignedNormalizedMagnitude = ShortMaximum * 2F;
+    private const float SignedIntegerMinimum = short.MinValue;
+    private const float SignedIntegerRange = ushort.MaxValue;
 
     /// <summary>
     /// Expands signed 16-bit components to native or scaled vectors.
@@ -79,11 +81,14 @@ internal static class SignedShort4PixelOperations
 
             if (normalized)
             {
+                // Both minimum two's-complement SNORM encodings represent -1.
+                vector = Vector4.Max(vector, new Vector4(-ShortMaximum));
+
                 if (scaled)
                 {
                     // Offset exact integer components before division to avoid cancellation near the signed-normalized lower bound.
                     vector += new Vector4(ShortMaximum);
-                    vector /= ShortMagnitude;
+                    vector /= SignedNormalizedMagnitude;
                 }
                 else
                 {
@@ -92,8 +97,9 @@ internal static class SignedShort4PixelOperations
             }
             else if (scaled)
             {
-                vector += new Vector4(ShortMaximum);
-                vector /= ShortMagnitude;
+                // SINT uses every two's-complement code, unlike SNORM where both minimum encodings represent -1.
+                vector -= new Vector4(SignedIntegerMinimum);
+                vector /= SignedIntegerRange;
             }
 
             Unsafe.Add(ref destinationBase, (uint)index) = vector;
@@ -182,8 +188,8 @@ internal static class SignedShort4PixelOperations
             {
                 if (scaled)
                 {
-                    vector *= ShortMagnitude;
-                    vector -= new Vector4(ShortMaximum);
+                    vector *= SignedIntegerRange;
+                    vector += new Vector4(SignedIntegerMinimum);
                 }
 
                 vector = Numerics.Clamp(vector, new Vector4(short.MinValue), new Vector4(short.MaxValue));
@@ -209,11 +215,14 @@ internal static class SignedShort4PixelOperations
     {
         if (normalized)
         {
+            // Both minimum two's-complement SNORM encodings represent -1.
+            source = Vector512.Max(source, Vector512.Create(-ShortMaximum));
+
             if (scaled)
             {
                 // Offset exact integer components before division to avoid cancellation near the signed-normalized lower bound.
                 source += Vector512.Create(ShortMaximum);
-                source /= Vector512.Create(ShortMagnitude);
+                source /= Vector512.Create(SignedNormalizedMagnitude);
             }
             else
             {
@@ -222,8 +231,8 @@ internal static class SignedShort4PixelOperations
         }
         else if (scaled)
         {
-            source += Vector512.Create(ShortMaximum);
-            source /= Vector512.Create(ShortMagnitude);
+            source -= Vector512.Create(SignedIntegerMinimum);
+            source /= Vector512.Create(SignedIntegerRange);
         }
 
         return source;
@@ -241,11 +250,14 @@ internal static class SignedShort4PixelOperations
     {
         if (normalized)
         {
+            // Both minimum two's-complement SNORM encodings represent -1.
+            source = Vector256.Max(source, Vector256.Create(-ShortMaximum));
+
             if (scaled)
             {
                 // Offset exact integer components before division to avoid cancellation near the signed-normalized lower bound.
                 source += Vector256.Create(ShortMaximum);
-                source /= Vector256.Create(ShortMagnitude);
+                source /= Vector256.Create(SignedNormalizedMagnitude);
             }
             else
             {
@@ -254,8 +266,8 @@ internal static class SignedShort4PixelOperations
         }
         else if (scaled)
         {
-            source += Vector256.Create(ShortMaximum);
-            source /= Vector256.Create(ShortMagnitude);
+            source -= Vector256.Create(SignedIntegerMinimum);
+            source /= Vector256.Create(SignedIntegerRange);
         }
 
         return source;
@@ -273,11 +285,14 @@ internal static class SignedShort4PixelOperations
     {
         if (normalized)
         {
+            // Both minimum two's-complement SNORM encodings represent -1.
+            source = Vector128.Max(source, Vector128.Create(-ShortMaximum));
+
             if (scaled)
             {
                 // Offset exact integer components before division to avoid cancellation near the signed-normalized lower bound.
                 source += Vector128.Create(ShortMaximum);
-                source /= Vector128.Create(ShortMagnitude);
+                source /= Vector128.Create(SignedNormalizedMagnitude);
             }
             else
             {
@@ -286,8 +301,8 @@ internal static class SignedShort4PixelOperations
         }
         else if (scaled)
         {
-            source += Vector128.Create(ShortMaximum);
-            source /= Vector128.Create(ShortMagnitude);
+            source -= Vector128.Create(SignedIntegerMinimum);
+            source /= Vector128.Create(SignedIntegerRange);
         }
 
         return source;
@@ -318,8 +333,8 @@ internal static class SignedShort4PixelOperations
         {
             if (scaled)
             {
-                source *= Vector512.Create(ShortMagnitude);
-                source -= Vector512.Create(ShortMaximum);
+                source *= Vector512.Create(SignedIntegerRange);
+                source += Vector512.Create(SignedIntegerMinimum);
             }
 
             source = Vector512.Min(Vector512.Max(source, Vector512.Create((float)short.MinValue)), Vector512.Create((float)short.MaxValue));
@@ -353,8 +368,8 @@ internal static class SignedShort4PixelOperations
         {
             if (scaled)
             {
-                source *= Vector256.Create(ShortMagnitude);
-                source -= Vector256.Create(ShortMaximum);
+                source *= Vector256.Create(SignedIntegerRange);
+                source += Vector256.Create(SignedIntegerMinimum);
             }
 
             source = Vector256.Min(Vector256.Max(source, Vector256.Create((float)short.MinValue)), Vector256.Create((float)short.MaxValue));
@@ -388,8 +403,8 @@ internal static class SignedShort4PixelOperations
         {
             if (scaled)
             {
-                source *= Vector128.Create(ShortMagnitude);
-                source -= Vector128.Create(ShortMaximum);
+                source *= Vector128.Create(SignedIntegerRange);
+                source += Vector128.Create(SignedIntegerMinimum);
             }
 
             source = Vector128.Min(Vector128.Max(source, Vector128.Create((float)short.MinValue)), Vector128.Create((float)short.MaxValue));

@@ -10,7 +10,9 @@ namespace SixLabors.ImageSharp.PixelFormats;
 /// Packed pixel type containing four associated 16-bit floating-point values.
 /// </summary>
 /// <remarks>
-/// The native packed and vector representations use associated alpha.
+/// <see cref="ToVector4"/> returns the stored associated IEEE 754 binary16 values directly. Scaled vector conversions
+/// normalize the finite range <c>[-65504, 65504]</c> to <c>[0, 1]</c> while preserving associated alpha. The packed
+/// representation is binary-compatible with <c>DXGI_FORMAT_R16G16B16A16_FLOAT</c>.
 /// </remarks>
 public partial struct HalfVector4P : IPixel<HalfVector4P>, IPackedVector<ulong>
 {
@@ -58,13 +60,8 @@ public partial struct HalfVector4P : IPixel<HalfVector4P>, IPackedVector<ulong>
     }
 
     /// <inheritdoc />
-    public readonly Vector4 ToScaledVector4()
-    {
-        Vector4 scaled = this.ToVector4();
-        scaled += Vector4.One;
-        scaled /= 2F;
-        return scaled;
-    }
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public readonly Vector4 ToScaledVector4() => HalfTypeHelper.ToScaled(this.ToVector4());
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -90,11 +87,8 @@ public partial struct HalfVector4P : IPixel<HalfVector4P>, IPackedVector<ulong>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public readonly Vector4 ToUnassociatedVector4()
     {
-        // Association is defined in the common scaled domain. Binary16-native W is an affine encoding of alpha, so it cannot be used as a divisor directly.
         Vector4 vector = this.ToUnassociatedScaledVector4();
-        vector *= 2F;
-        vector -= Vector4.One;
-        return vector;
+        return HalfTypeHelper.FromScaled(vector);
     }
 
     /// <inheritdoc />
@@ -121,9 +115,7 @@ public partial struct HalfVector4P : IPixel<HalfVector4P>, IPackedVector<ulong>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static HalfVector4P FromUnassociatedVector4(Vector4 source)
     {
-        // Convert the binary16-native range to the common scaled domain before associating because native W is not opacity.
-        source += Vector4.One;
-        source /= 2F;
+        source = HalfTypeHelper.ToScaled(source);
         return FromUnassociatedScaledVector4(source);
     }
 
@@ -131,9 +123,7 @@ public partial struct HalfVector4P : IPixel<HalfVector4P>, IPackedVector<ulong>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static HalfVector4P FromAssociatedVector4(Vector4 source)
     {
-        // Reassociation must also operate in scaled space so RGB follows the quantized scaled alpha rather than the binary16-native W component.
-        source += Vector4.One;
-        source /= 2F;
+        source = HalfTypeHelper.ToScaled(source);
         return FromAssociatedScaledVector4(source);
     }
 
@@ -144,20 +134,6 @@ public partial struct HalfVector4P : IPixel<HalfVector4P>, IPackedVector<ulong>
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static HalfVector4P FromAssociatedScaledVector4(Vector4 source) => PackAssociatedScaledVector4(Reassociate(source));
-
-    /// <summary>
-    /// Packs an associated scaled vector into binary16-native storage.
-    /// </summary>
-    /// <param name="source">The associated scaled vector.</param>
-    /// <returns>The packed pixel.</returns>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static HalfVector4P PackAssociatedScaledVector4(Vector4 source)
-    {
-        // Binary16 storage uses the native [-1, 1] range even though association is defined in scaled opacity space.
-        source *= 2F;
-        source -= Vector4.One;
-        return new() { PackedValue = Pack(source) };
-    }
 
     /// <inheritdoc />
     public static HalfVector4P FromAbgr32(Abgr32 source) => FromUnassociatedScaledVector4(source.ToScaledVector4());
@@ -224,9 +200,8 @@ public partial struct HalfVector4P : IPixel<HalfVector4P>, IPackedVector<ulong>
     {
         source = Numerics.Clamp(source, Vector4.Zero, Vector4.One);
 
-        // Quantize alpha through the destination's native half representation before RGB is associated with it.
-        float nativeAlpha = (source.W * 2F) - 1F;
-        source.W = (HalfTypeHelper.Unpack(HalfTypeHelper.Pack(nativeAlpha)) + 1F) / 2F;
+        // RGB must use the scaled alpha that the binary16 representation can reproduce.
+        source.W = QuantizeScaledAlpha(source.W);
         Numerics.Premultiply(ref source);
         return source;
     }
@@ -246,15 +221,37 @@ public partial struct HalfVector4P : IPixel<HalfVector4P>, IPackedVector<ulong>
             return Vector4.Zero;
         }
 
-        // The binary16-native alpha range is [-1, 1]. Clamp before packing so out-of-range scaled alpha cannot escape the pixel's declared [0, 1] opacity range.
-        float nativeAlpha = Numerics.Clamp((alpha * 2F) - 1F, -1F, 1F);
-        float storedAlpha = (HalfTypeHelper.Unpack(HalfTypeHelper.Pack(nativeAlpha)) + 1F) / 2F;
+        float storedAlpha = QuantizeScaledAlpha(alpha);
 
         // Associated RGB scales by the same ratio as alpha. Applying that ratio directly avoids the extra division and multiplication of an unpremultiply/premultiply round trip and preserves exact midpoints when alpha needs no quantization.
         source *= storedAlpha / alpha;
         source.W = storedAlpha;
         Numerics.ClampRgbToAlpha(ref source);
         return source;
+    }
+
+    /// <summary>
+    /// Packs an associated scaled vector into the native binary16 representation.
+    /// </summary>
+    /// <param name="source">The associated scaled vector.</param>
+    /// <returns>The packed pixel.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static HalfVector4P PackAssociatedScaledVector4(Vector4 source)
+    {
+        source = HalfTypeHelper.FromScaled(source);
+        return new HalfVector4P { PackedValue = Pack(source) };
+    }
+
+    /// <summary>
+    /// Quantizes scaled alpha through the native binary16 representation.
+    /// </summary>
+    /// <param name="alpha">The scaled alpha value.</param>
+    /// <returns>The scaled value represented by the stored binary16 component.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static float QuantizeScaledAlpha(float alpha)
+    {
+        float nativeAlpha = HalfTypeHelper.FromScaled(Numerics.Clamp(alpha, 0F, 1F));
+        return HalfTypeHelper.ToScaled(HalfTypeHelper.Unpack(HalfTypeHelper.Pack(nativeAlpha)));
     }
 
     /// <summary>

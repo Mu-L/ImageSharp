@@ -5,7 +5,6 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
-using System.Runtime.Intrinsics.X86;
 using SixLabors.ImageSharp.Common.Helpers;
 
 namespace SixLabors.ImageSharp.PixelFormats.Utils;
@@ -51,27 +50,33 @@ internal static partial class Vector4Converters
             int componentsPerPixel = Vector128<float>.Count;
             int i = 0;
 
-            if (Avx512F.IsSupported)
+            // Portable widening advances one integer width at a time, so assemble the wider vectors from ordered 128-bit halves.
+            if (Vector512.IsHardwareAccelerated)
             {
                 int pixelsPerVector = Vector512<float>.Count / componentsPerPixel;
 
                 for (; i <= destination.Length - pixelsPerVector; i += pixelsPerVector)
                 {
                     Vector128<byte> packed = Vector128.LoadUnsafe(ref sourceBase, (nuint)(i * componentsPerPixel));
-                    Vector512<int> integers = Avx512F.ConvertToVector512Int32(packed);
-                    Unsafe.As<Vector4, Vector512<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToUnassociatedVector4(Avx512F.ConvertToVector512Single(integers));
+                    Vector128<ushort> lowerShorts = Vector128.WidenLower(packed);
+                    Vector128<ushort> upperShorts = Vector128.WidenUpper(packed);
+                    Vector256<uint> lowerIntegers = Vector256.Create(Vector128.WidenLower(lowerShorts), Vector128.WidenUpper(lowerShorts));
+                    Vector256<uint> upperIntegers = Vector256.Create(Vector128.WidenLower(upperShorts), Vector128.WidenUpper(upperShorts));
+                    Vector512<int> integers = Vector512.Create(lowerIntegers, upperIntegers).AsInt32();
+                    Unsafe.As<Vector4, Vector512<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToUnassociatedVector4(Vector512.ConvertToSingle(integers));
                 }
             }
 
-            if (Avx2.IsSupported)
+            if (Vector256.IsHardwareAccelerated)
             {
                 int pixelsPerVector = Vector256<float>.Count / componentsPerPixel;
 
                 for (; i <= destination.Length - pixelsPerVector; i += pixelsPerVector)
                 {
                     ulong packed = Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref sourceBase, (uint)(i * componentsPerPixel)));
-                    Vector256<int> integers = Avx2.ConvertToVector256Int32(Vector128.CreateScalarUnsafe(packed).AsByte());
-                    Unsafe.As<Vector4, Vector256<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToUnassociatedVector4(Avx.ConvertToVector256Single(integers));
+                    Vector128<ushort> shorts = Vector128.WidenLower(Vector128.CreateScalarUnsafe(packed).AsByte());
+                    Vector256<int> integers = Vector256.Create(Vector128.WidenLower(shorts), Vector128.WidenUpper(shorts)).AsInt32();
+                    Unsafe.As<Vector4, Vector256<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToUnassociatedVector4(Vector256.ConvertToSingle(integers));
                 }
             }
 

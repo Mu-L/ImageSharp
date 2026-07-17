@@ -17,14 +17,18 @@ public partial struct HalfVector4
     /// </summary>
     internal class PixelOperations : PixelOperations<HalfVector4>
     {
-        private static readonly Vector4 NativeScale = new(2F);
+        private static readonly Vector4 NativeToScaledMultiplier = new(HalfTypeHelper.InverseFiniteRange);
+        private static readonly Vector4 NativeToScaledOffset = new(HalfTypeHelper.ScaledMidpoint);
+        private static readonly Vector4 ScaledToNativeMultiplier = new(HalfTypeHelper.FiniteRange);
+        private static readonly Vector4 ScaledToNativeOffset = new(HalfTypeHelper.FiniteMinimum);
 
         /// <inheritdoc />
         protected override void ToUnassociatedVector4(Configuration configuration, ReadOnlySpan<HalfVector4> source, Span<Vector4> destination)
         {
             Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
 
-            HalfVector4P.PixelOperations.Unpack(MemoryMarshal.Cast<HalfVector4, HalfVector4P>(source), destination[..source.Length], false);
+            // The half-vector layouts are identical, so the shared expansion kernel can process the source without copying it.
+            RgbaHalfP.PixelOperations.Unpack(MemoryMarshal.Cast<HalfVector4, RgbaHalfP>(source), destination[..source.Length]);
         }
 
         /// <inheritdoc />
@@ -34,11 +38,11 @@ public partial struct HalfVector4
 
             destination = destination[..source.Length];
 
-            // HalfVector4P has the same four-half layout, allowing both formats to share the SIMD half expansion. Association must
-            // still occur in scaled space because the native half values use an affine [-1, 1] color coordinate system.
-            HalfVector4P.PixelOperations.Unpack(MemoryMarshal.Cast<HalfVector4, HalfVector4P>(source), destination, true);
+            // Association uses normalized opacity, not the native binary16 alpha value.
+            RgbaHalfP.PixelOperations.Unpack(MemoryMarshal.Cast<HalfVector4, RgbaHalfP>(source), destination);
+            Vector4Converters.MultiplyThenAdd(destination, NativeToScaledMultiplier, NativeToScaledOffset);
             Numerics.Premultiply(destination);
-            Vector4Converters.MultiplyThenAdd(destination, NativeScale, -Vector4.One);
+            Vector4Converters.MultiplyThenAdd(destination, ScaledToNativeMultiplier, ScaledToNativeOffset);
         }
 
         /// <inheritdoc />
@@ -46,17 +50,16 @@ public partial struct HalfVector4
         {
             Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
 
-            HalfVector4P.PixelOperations.Unpack(MemoryMarshal.Cast<HalfVector4, HalfVector4P>(source), destination[..source.Length], true);
+            destination = destination[..source.Length];
+            RgbaHalfP.PixelOperations.Unpack(MemoryMarshal.Cast<HalfVector4, RgbaHalfP>(source), destination);
+            Vector4Converters.MultiplyThenAdd(destination, NativeToScaledMultiplier, NativeToScaledOffset);
         }
 
         /// <inheritdoc />
         protected override void ToAssociatedScaledVector4(Configuration configuration, ReadOnlySpan<HalfVector4> source, Span<Vector4> destination)
         {
-            Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
-
-            destination = destination[..source.Length];
-            HalfVector4P.PixelOperations.Unpack(MemoryMarshal.Cast<HalfVector4, HalfVector4P>(source), destination, true);
-            Numerics.Premultiply(destination);
+            this.ToUnassociatedScaledVector4(configuration, source, destination);
+            Numerics.Premultiply(destination[..source.Length]);
         }
 
         /// <inheritdoc />
@@ -64,8 +67,8 @@ public partial struct HalfVector4
         {
             Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
 
-            destination = destination[..source.Length];
-            HalfVector4P.PixelOperations.Pack(source, MemoryMarshal.Cast<HalfVector4, HalfVector4P>(destination), false);
+            // DirectX half vectors are not normalized formats, so values outside the nominal color range must reach storage unchanged.
+            RgbaHalfP.PixelOperations.PackUnclamped(source, MemoryMarshal.Cast<HalfVector4, RgbaHalfP>(destination[..source.Length]));
         }
 
         /// <inheritdoc />
@@ -73,12 +76,11 @@ public partial struct HalfVector4
         {
             Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
 
-            destination = destination[..source.Length];
-
-            // Normalize native alpha with RGB before unassociation, then reuse the shared half packing kernel in scaled mode.
-            Vector4Converters.AddThenDivide(source, Vector4.One, NativeScale);
+            // Restore normalized opacity before unassociating, then return the result to the native binary16 range.
+            Vector4Converters.MultiplyThenAdd(source, NativeToScaledMultiplier, NativeToScaledOffset);
             Numerics.UnPremultiply(source);
-            HalfVector4P.PixelOperations.Pack(source, MemoryMarshal.Cast<HalfVector4, HalfVector4P>(destination), true);
+            Vector4Converters.MultiplyThenAdd(source, ScaledToNativeMultiplier, ScaledToNativeOffset);
+            RgbaHalfP.PixelOperations.PackUnclamped(source, MemoryMarshal.Cast<HalfVector4, RgbaHalfP>(destination[..source.Length]));
         }
 
         /// <inheritdoc />
@@ -86,8 +88,8 @@ public partial struct HalfVector4
         {
             Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
 
-            destination = destination[..source.Length];
-            HalfVector4P.PixelOperations.Pack(source, MemoryMarshal.Cast<HalfVector4, HalfVector4P>(destination), true);
+            Vector4Converters.MultiplyThenAdd(source, ScaledToNativeMultiplier, ScaledToNativeOffset);
+            RgbaHalfP.PixelOperations.PackUnclamped(source, MemoryMarshal.Cast<HalfVector4, RgbaHalfP>(destination[..source.Length]));
         }
 
         /// <inheritdoc />
@@ -95,9 +97,9 @@ public partial struct HalfVector4
         {
             Guard.DestinationShouldNotBeTooShort(source, destination, nameof(destination));
 
-            destination = destination[..source.Length];
             Numerics.UnPremultiply(source);
-            HalfVector4P.PixelOperations.Pack(source, MemoryMarshal.Cast<HalfVector4, HalfVector4P>(destination), true);
+            Vector4Converters.MultiplyThenAdd(source, ScaledToNativeMultiplier, ScaledToNativeOffset);
+            RgbaHalfP.PixelOperations.PackUnclamped(source, MemoryMarshal.Cast<HalfVector4, RgbaHalfP>(destination[..source.Length]));
         }
     }
 }

@@ -1,6 +1,7 @@
 // Copyright (c) Six Labors.
 // Licensed under the Six Labors Split License.
 
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.Intrinsics;
 
@@ -11,6 +12,14 @@ namespace SixLabors.ImageSharp.PixelFormats;
 /// </summary>
 internal static class HalfTypeHelper
 {
+    // IEEE 754 binary16 has a largest finite magnitude of 65504. Scaled pixel vectors map that complete finite
+    // interval to [0, 1], while native vectors continue to expose the stored floating-point value directly.
+    internal const float FiniteMinimum = -65504F;
+    internal const float FiniteMaximum = 65504F;
+    internal const float FiniteRange = FiniteMaximum - FiniteMinimum;
+    internal const float InverseFiniteRange = (float)(1D / FiniteRange);
+    internal const float ScaledMidpoint = .5F;
+
     // These constants mirror the binary16 conversion used by System.Half. Keeping the vector conversion
     // bit-for-bit equivalent to the scalar runtime conversion makes SIMD a pure throughput optimization.
     private const uint HalfExponentMask = 0x7C00;
@@ -39,6 +48,54 @@ internal static class HalfTypeHelper
     /// <returns>The <see cref="float"/>.</returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal static float Unpack(ushort value) => (float)BitConverter.UInt16BitsToHalf(value);
+
+    /// <summary>
+    /// Normalizes a finite binary16 value to the scaled pixel range.
+    /// </summary>
+    /// <param name="value">The native binary16 value represented as a <see cref="float"/>.</param>
+    /// <returns>The normalized value.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float ToScaled(float value) => (value * InverseFiniteRange) + ScaledMidpoint;
+
+    /// <summary>
+    /// Normalizes finite binary16 values to the scaled pixel range.
+    /// </summary>
+    /// <param name="value">The native binary16 values.</param>
+    /// <returns>The normalized values.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Vector2 ToScaled(Vector2 value) => (value * InverseFiniteRange) + new Vector2(ScaledMidpoint);
+
+    /// <summary>
+    /// Normalizes finite binary16 values to the scaled pixel range.
+    /// </summary>
+    /// <param name="value">The native binary16 values.</param>
+    /// <returns>The normalized values.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Vector4 ToScaled(Vector4 value) => (value * InverseFiniteRange) + new Vector4(ScaledMidpoint);
+
+    /// <summary>
+    /// Expands a normalized value to the finite binary16 range.
+    /// </summary>
+    /// <param name="value">The normalized value.</param>
+    /// <returns>The native binary16 value represented as a <see cref="float"/>.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static float FromScaled(float value) => (value * FiniteRange) + FiniteMinimum;
+
+    /// <summary>
+    /// Expands normalized values to the finite binary16 range.
+    /// </summary>
+    /// <param name="value">The normalized values.</param>
+    /// <returns>The native binary16 values.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Vector2 FromScaled(Vector2 value) => (value * FiniteRange) + new Vector2(FiniteMinimum);
+
+    /// <summary>
+    /// Expands normalized values to the finite binary16 range.
+    /// </summary>
+    /// <param name="value">The normalized values.</param>
+    /// <returns>The native binary16 values.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    internal static Vector4 FromScaled(Vector4 value) => (value * FiniteRange) + new Vector4(FiniteMinimum);
 
     /// <summary>
     /// Unpacks eight binary16 values into two vectors of single-precision values.

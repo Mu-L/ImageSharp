@@ -8,10 +8,11 @@ namespace SixLabors.ImageSharp.PixelFormats;
 
 /// <summary>
 /// Packed pixel type containing a single 8-bit normalized alpha value.
-/// <para>
-/// Ranges from [0, 0, 0, 0] to [0, 0, 0, 1] in vector form.
-/// </para>
 /// </summary>
+/// <remarks>
+/// <see cref="ToVector4"/> and scaled vector conversions return alpha in <c>[0, 1]</c> with zero color components.
+/// The storage layout matches <c>DXGI_FORMAT_A8_UNORM</c>.
+/// </remarks>
 public partial struct A8 : IPixel<A8>, IPackedVector<byte>
 {
     /// <summary>

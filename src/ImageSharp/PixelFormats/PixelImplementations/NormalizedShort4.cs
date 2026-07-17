@@ -8,11 +8,14 @@ using System.Runtime.Intrinsics;
 namespace SixLabors.ImageSharp.PixelFormats;
 
 /// <summary>
-/// Packed pixel type containing four 16-bit signed normalized values, ranging from −1 to 1.
-/// <para>
-/// Ranges from [-1, -1, -1, -1] to [1, 1, 1, 1] in vector form.
-/// </para>
+/// Packed pixel type containing four 16-bit signed normalized values.
 /// </summary>
+/// <remarks>
+/// <see cref="ToVector4"/> returns components in the native signed-normalized range <c>[-1, 1]</c>.
+/// Scaled vector conversions return components in <c>[0, 1]</c>.
+/// The packed two's-complement codes <c>-32768</c> and <c>-32767</c> both represent <c>-1</c>,
+/// matching <c>DXGI_FORMAT_R16G16B16A16_SNORM</c>.
+/// </remarks>
 public partial struct NormalizedShort4 : IPixel<NormalizedShort4>, IPackedVector<ulong>
 {
     // Largest two byte positive number 0xFFFF >> 1;
@@ -74,21 +77,28 @@ public partial struct NormalizedShort4 : IPixel<NormalizedShort4>, IPackedVector
     {
         // Offset the exact signed components before division. Mapping an already normalized value through (value + 1) / 2 loses precision near -1 through cancellation.
         Vector4 scaled = new(
-            (short)((this.PackedValue >> 0x00) & 0xFFFF) + MaxPos,
-            (short)((this.PackedValue >> 0x10) & 0xFFFF) + MaxPos,
-            (short)((this.PackedValue >> 0x20) & 0xFFFF) + MaxPos,
-            (short)((this.PackedValue >> 0x30) & 0xFFFF) + MaxPos);
+            (short)((this.PackedValue >> 0x00) & 0xFFFF),
+            (short)((this.PackedValue >> 0x10) & 0xFFFF),
+            (short)((this.PackedValue >> 0x20) & 0xFFFF),
+            (short)((this.PackedValue >> 0x30) & 0xFFFF));
 
-        return scaled / ScaledMagnitude;
+        // SNORM reserves both minimum two's-complement codes for -1. Clamp before offsetting so raw -32768 cannot escape the scaled range.
+        return (Vector4.Max(scaled, Min) + Max) / ScaledMagnitude;
     }
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly Vector4 ToVector4() => new(
-                     (short)((this.PackedValue >> 0x00) & 0xFFFF) / MaxPos,
-                     (short)((this.PackedValue >> 0x10) & 0xFFFF) / MaxPos,
-                     (short)((this.PackedValue >> 0x20) & 0xFFFF) / MaxPos,
-                     (short)((this.PackedValue >> 0x30) & 0xFFFF) / MaxPos);
+    public readonly Vector4 ToVector4()
+    {
+        Vector4 vector = new(
+            (short)((this.PackedValue >> 0x00) & 0xFFFF),
+            (short)((this.PackedValue >> 0x10) & 0xFFFF),
+            (short)((this.PackedValue >> 0x20) & 0xFFFF),
+            (short)((this.PackedValue >> 0x30) & 0xFFFF));
+
+        // DirectX SNORM maps both -32768 and -32767 to -1.
+        return Vector4.Max(vector, Min) / MaxPos;
+    }
 
     /// <inheritdoc />
     public static PixelTypeInfo GetPixelTypeInfo()

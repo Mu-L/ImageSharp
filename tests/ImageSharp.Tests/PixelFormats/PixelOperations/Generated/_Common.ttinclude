@@ -29,6 +29,7 @@ using Xunit.Abstractions;
         "Rgba1010102",
         "Rgba32",
         "Rgba64",
+        "RgbaHalf",
         "RgbaVector",
         "Short4"
             ];
@@ -40,7 +41,8 @@ using Xunit.Abstractions;
         "Bgra32P",
         "HalfVector4P",
         "NormalizedByte4P",
-        "Rgba32P"
+        "Rgba32P",
+        "RgbaHalfP"
             ];
 
     private static readonly string[] CommonPixelTypes =
@@ -77,6 +79,8 @@ using Xunit.Abstractions;
         "Rgba32",
         "Rgba32P",
         "Rgba64",
+        "RgbaHalf",
+        "RgbaHalfP",
         "RgbaVector",
         "Short2",
         "Short4"

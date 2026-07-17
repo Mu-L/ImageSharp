@@ -4,6 +4,7 @@
 
 using System.Buffers;
 using System.Buffers.Binary;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Text;
 using SixLabors.ImageSharp.Formats.Exr.Compression;
@@ -208,11 +209,10 @@ internal sealed class ExrDecoderCore : ImageDecoderCore
 
                 for (int x = 0; x < width; x++)
                 {
-                    HalfVector4 pixelValue = new(redPixelData[x], greenPixelData[x], bluePixelData[x], hasAlpha ? alphaPixelData[x] : 1.0f);
+                    Vector4 pixelValue = new(redPixelData[x], greenPixelData[x], bluePixelData[x], hasAlpha ? alphaPixelData[x] : 1F);
 
-                    // OpenEXR channel values are associated. The destination conversion retains that representation for associated
-                    // pixels and unassociates only when the destination stores straight alpha.
-                    pixelRow[x] = TPixel.FromAssociatedVector4(pixelValue.ToVector4());
+                    // OpenEXR channels are associated color values, not values in the destination pixel format's native numeric range.
+                    pixelRow[x] = TPixel.FromAssociatedScaledVector4(pixelValue);
                 }
 
                 decodedRows++;
@@ -292,8 +292,8 @@ internal sealed class ExrDecoderCore : ImageDecoderCore
                 {
                     Rgba128 pixelValue = new(redPixelData[x], greenPixelData[x], bluePixelData[x], hasAlpha ? alphaPixelData[x] : uint.MaxValue);
 
-                    // Preserve the file's associated-alpha convention while converting from the native unsigned channel domain.
-                    pixelRow[x] = TPixel.FromAssociatedVector4(pixelValue.ToVector4());
+                    // Rgba128 normalizes the unsigned channel values before the destination applies its own numeric representation.
+                    pixelRow[x] = TPixel.FromAssociatedScaledVector4(pixelValue.ToVector4());
                 }
 
                 decodedRows++;

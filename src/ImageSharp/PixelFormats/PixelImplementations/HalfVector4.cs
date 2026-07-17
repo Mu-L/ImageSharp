@@ -7,11 +7,13 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.PixelFormats;
 
 /// <summary>
-/// Packed pixel type containing four 16-bit floating-point values.
-/// <para>
-/// Ranges from [-1, -1, -1, -1] to [1, 1, 1, 1] in vector form.
-/// </para>
+/// Packed pixel type containing four IEEE 754 binary16 floating-point values.
 /// </summary>
+/// <remarks>
+/// <see cref="ToVector4"/> returns the stored IEEE 754 binary16 values directly. Scaled vector conversions normalize
+/// the finite range <c>[-65504, 65504]</c> to <c>[0, 1]</c>. The packed representation is binary-compatible with
+/// <c>DXGI_FORMAT_R16G16B16A16_FLOAT</c>.
+/// </remarks>
 public partial struct HalfVector4 : IPixel<HalfVector4>, IPackedVector<ulong>
 {
     /// <summary>
@@ -63,13 +65,7 @@ public partial struct HalfVector4 : IPixel<HalfVector4>, IPackedVector<ulong>
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public readonly Vector4 ToScaledVector4()
-    {
-        Vector4 scaled = this.ToVector4();
-        scaled += Vector4.One;
-        scaled /= 2f;
-        return scaled;
-    }
+    public readonly Vector4 ToScaledVector4() => HalfTypeHelper.ToScaled(this.ToVector4());
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -112,10 +108,8 @@ public partial struct HalfVector4 : IPixel<HalfVector4>, IPackedVector<ulong>
     {
         Vector4 vector = this.ToAssociatedScaledVector4();
 
-        // Native components use an affine [-1, 1] encoding, so direct multiplication would use the wrong zero point.
-        vector *= 2F;
-        vector -= Vector4.One;
-        return vector;
+        // Association is defined in scaled color space, so map the associated result back to the native binary16 range.
+        return HalfTypeHelper.FromScaled(vector);
     }
 
     /// <inheritdoc />
@@ -138,20 +132,14 @@ public partial struct HalfVector4 : IPixel<HalfVector4>, IPackedVector<ulong>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static HalfVector4 FromAssociatedVector4(Vector4 source)
     {
-        // Map the affine native encoding to logical [0, 1] space before unassociating.
-        source += Vector4.One;
-        source /= 2F;
+        // Restore scaled opacity before unassociating the color channels.
+        source = HalfTypeHelper.ToScaled(source);
         return FromAssociatedScaledVector4(source);
     }
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static HalfVector4 FromScaledVector4(Vector4 source)
-    {
-        source *= 2f;
-        source -= Vector4.One;
-        return FromVector4(source);
-    }
+    public static HalfVector4 FromScaledVector4(Vector4 source) => FromVector4(HalfTypeHelper.FromScaled(source));
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

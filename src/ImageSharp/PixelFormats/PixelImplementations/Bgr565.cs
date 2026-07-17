@@ -7,14 +7,12 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.PixelFormats;
 
 /// <summary>
-/// Packed pixel type containing unsigned normalized values ranging from 0 to 1.
+/// Packed pixel type containing three unsigned normalized values.
 /// The x and z components use 5 bits, and the y component uses 6 bits.
-/// <para>
-/// Ranges from [0, 0, 0, 1] to [1, 1, 1, 1] in vector form.
-/// </para>
 /// </summary>
 /// <remarks>
-/// Initializes a new instance of the <see cref="Bgr565"/> struct.
+/// <see cref="ToVector4"/> and scaled vector conversions return color components in <c>[0, 1]</c> with an implicit
+/// alpha of <c>1</c>. The storage layout matches <c>DXGI_FORMAT_B5G6R5_UNORM</c>.
 /// </remarks>
 /// <param name="vector">
 /// The vector containing the components for the packed value.

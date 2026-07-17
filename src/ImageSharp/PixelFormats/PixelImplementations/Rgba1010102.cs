@@ -7,12 +7,13 @@ using System.Runtime.CompilerServices;
 namespace SixLabors.ImageSharp.PixelFormats;
 
 /// <summary>
-/// Packed vector type containing 4 unsigned normalized values ranging from 0 to 1.
+/// Packed pixel type containing four unsigned normalized values.
 /// The x, y and z components use 10 bits, and the w component uses 2 bits.
-/// <para>
-/// Ranges from [0, 0, 0, 0] to [1, 1, 1, 1] in vector form.
-/// </para>
 /// </summary>
+/// <remarks>
+/// <see cref="ToVector4"/> and scaled vector conversions return all components in <c>[0, 1]</c>. The storage layout matches
+/// <c>DXGI_FORMAT_R10G10B10A2_UNORM</c>.
+/// </remarks>
 public partial struct Rgba1010102 : IPixel<Rgba1010102>, IPackedVector<uint>
 {
     private static readonly Vector4 Multiplier = new(1023F, 1023F, 1023F, 3F);

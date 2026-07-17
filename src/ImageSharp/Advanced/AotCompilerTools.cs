@@ -114,6 +114,8 @@ internal static class AotCompilerTools
             Seed<Rgba32>();
             Seed<Rgba32P>();
             Seed<Rgba64>();
+            Seed<RgbaHalf>();
+            Seed<RgbaHalfP>();
             Seed<RgbaVector>();
             Seed<Short2>();
             Seed<Short4>();
@@ -199,6 +201,8 @@ internal static class AotCompilerTools
         img.CloneAs<Rgba32>(default);
         img.CloneAs<Rgba32P>(default);
         img.CloneAs<Rgba64>(default);
+        img.CloneAs<RgbaHalf>(default);
+        img.CloneAs<RgbaHalfP>(default);
         img.CloneAs<RgbaVector>(default);
         img.CloneAs<Short2>(default);
         img.CloneAs<Short4>(default);

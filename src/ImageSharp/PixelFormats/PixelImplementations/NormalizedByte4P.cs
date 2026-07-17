@@ -11,13 +11,17 @@ namespace SixLabors.ImageSharp.PixelFormats;
 /// Packed pixel type containing four associated 8-bit signed normalized values ranging from -1 to 1.
 /// </summary>
 /// <remarks>
-/// The native packed and vector representations use associated alpha.
+/// <see cref="ToVector4"/> returns associated components in the native signed-normalized range <c>[-1, 1]</c>.
+/// Scaled vector conversions return associated components in <c>[0, 1]</c>.
+/// The packed two's-complement codes <c>-128</c> and <c>-127</c> both represent <c>-1</c>,
+/// matching <c>DXGI_FORMAT_R8G8B8A8_SNORM</c>.
 /// </remarks>
 public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector<uint>
 {
     private const float MaxPos = 127F;
     private const float ScaledMagnitude = MaxPos * 2F;
     private static readonly Vector4 Half = Vector128.Create(MaxPos).AsVector4();
+    private static readonly Vector4 Minimum = -Half;
     private static readonly Vector4 MinusOne = Vector128.Create(-1F).AsVector4();
 
     /// <summary>
@@ -65,12 +69,13 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     {
         // Offset the exact signed components before division. Mapping an already normalized value through (value + 1) / 2 loses precision near -1 through cancellation.
         Vector4 scaled = new(
-            (sbyte)((this.PackedValue >> 0) & 0xFF) + MaxPos,
-            (sbyte)((this.PackedValue >> 8) & 0xFF) + MaxPos,
-            (sbyte)((this.PackedValue >> 16) & 0xFF) + MaxPos,
-            (sbyte)((this.PackedValue >> 24) & 0xFF) + MaxPos);
+            (sbyte)((this.PackedValue >> 0) & 0xFF),
+            (sbyte)((this.PackedValue >> 8) & 0xFF),
+            (sbyte)((this.PackedValue >> 16) & 0xFF),
+            (sbyte)((this.PackedValue >> 24) & 0xFF));
 
-        return scaled / ScaledMagnitude;
+        // SNORM reserves both minimum two's-complement codes for -1. Clamp before offsetting so raw -128 cannot escape the scaled range.
+        return (Vector4.Max(scaled, Minimum) + Half) / ScaledMagnitude;
     }
 
     /// <inheritdoc />
@@ -82,11 +87,17 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     public readonly Vector4 ToAssociatedScaledVector4() => this.ToScaledVector4();
 
     /// <inheritdoc />
-    public readonly Vector4 ToVector4() => new(
-        (sbyte)((this.PackedValue >> 0) & 0xFF) / MaxPos,
-        (sbyte)((this.PackedValue >> 8) & 0xFF) / MaxPos,
-        (sbyte)((this.PackedValue >> 16) & 0xFF) / MaxPos,
-        (sbyte)((this.PackedValue >> 24) & 0xFF) / MaxPos);
+    public readonly Vector4 ToVector4()
+    {
+        Vector4 vector = new(
+            (sbyte)((this.PackedValue >> 0) & 0xFF),
+            (sbyte)((this.PackedValue >> 8) & 0xFF),
+            (sbyte)((this.PackedValue >> 16) & 0xFF),
+            (sbyte)((this.PackedValue >> 24) & 0xFF));
+
+        // DirectX SNORM maps both -128 and -127 to -1.
+        return Vector4.Max(vector, Minimum) / MaxPos;
+    }
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -244,10 +255,13 @@ public partial struct NormalizedByte4P : IPixel<NormalizedByte4P>, IPackedVector
     {
         // Offset signed storage into exact nonnegative byte magnitudes before division so the quotient retains the destination's byte-rounding midpoint.
         Vector4 vector = new(
-            (sbyte)(source.PackedValue >> 0) + MaxPos,
-            (sbyte)(source.PackedValue >> 8) + MaxPos,
-            (sbyte)(source.PackedValue >> 16) + MaxPos,
-            (sbyte)(source.PackedValue >> 24) + MaxPos);
+            (sbyte)(source.PackedValue >> 0),
+            (sbyte)(source.PackedValue >> 8),
+            (sbyte)(source.PackedValue >> 16),
+            (sbyte)(source.PackedValue >> 24));
+
+        // Clamp the duplicate SNORM minimum encoding before converting it to the nonnegative associated domain.
+        vector = Vector4.Max(vector, Minimum) + Half;
 
         if (vector.W == 0F)
         {

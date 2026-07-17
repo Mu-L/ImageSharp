@@ -62,6 +62,34 @@ public class NormalizedShort4Tests
     }
 
     [Fact]
+    public void NormalizedShort4_MinimumStorageCodeDecodesAsNegativeOne()
+    {
+        NormalizedShort4 pixel = new() { PackedValue = 0x8000800080008000 };
+
+        Assert.Equal(-Vector4.One, pixel.ToVector4());
+        Assert.Equal(Vector4.Zero, pixel.ToScaledVector4());
+
+        NormalizedShort4[] source = new NormalizedShort4[17];
+        Vector4[] native = new Vector4[source.Length];
+        Vector4[] scaled = new Vector4[source.Length];
+        Array.Fill(source, pixel);
+
+        PixelOperations<NormalizedShort4>.Instance.ToVector4(Configuration.Default, source, native);
+        PixelOperations<NormalizedShort4>.Instance.ToVector4(Configuration.Default, source, scaled, PixelConversionModifiers.Scale);
+
+        for (int i = 0; i < source.Length; i++)
+        {
+            Assert.Equal(-Vector4.One, native[i]);
+            Assert.Equal(Vector4.Zero, scaled[i]);
+        }
+
+        Vector4[] destructiveSource = new Vector4[source.Length];
+        NormalizedShort4[] actualPixels = new NormalizedShort4[source.Length];
+        PixelOperations<NormalizedShort4>.Instance.FromVector4Destructive(Configuration.Default, destructiveSource, actualPixels, PixelConversionModifiers.Scale);
+        Assert.All(actualPixels, actual => Assert.Equal(0x8001800180018001UL, actual.PackedValue));
+    }
+
+    [Fact]
     public void NormalizedShort4_ToScaledVector4()
     {
         // arrange

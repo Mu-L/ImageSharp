@@ -20,6 +20,8 @@ public partial struct NormalizedByte4P
     /// </summary>
     internal class PixelOperations : AssociatedAlphaPixelOperations<NormalizedByte4P>
     {
+        private const byte RestorePackedPixelOrder = 0b_11_01_10_00;
+
         /// <inheritdoc />
         protected override void ToUnassociatedVector4(Configuration configuration, ReadOnlySpan<NormalizedByte4P> source, Span<Vector4> destination)
         {
@@ -107,27 +109,33 @@ public partial struct NormalizedByte4P
             int componentsPerPixel = Vector128<float>.Count;
             int i = 0;
 
-            if (Vector512.IsHardwareAccelerated && Avx512F.IsSupported)
+            // Portable widening advances one integer width at a time, so assemble the wider vectors from ordered 128-bit halves.
+            if (Vector512.IsHardwareAccelerated)
             {
                 int pixelsPerVector = Vector512<float>.Count / Vector128<float>.Count;
 
                 for (; i <= source.Length - pixelsPerVector; i += pixelsPerVector)
                 {
                     Vector128<sbyte> packed = Vector128.LoadUnsafe(ref sourceBase, (nuint)(i * componentsPerPixel)).AsSByte();
-                    Vector512<int> integers = Avx512F.ConvertToVector512Int32(packed);
-                    Unsafe.As<Vector4, Vector512<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToVector4(Avx512F.ConvertToVector512Single(integers), scaled);
+                    Vector128<short> lowerShorts = Vector128.WidenLower(packed);
+                    Vector128<short> upperShorts = Vector128.WidenUpper(packed);
+                    Vector256<int> lowerIntegers = Vector256.Create(Vector128.WidenLower(lowerShorts), Vector128.WidenUpper(lowerShorts));
+                    Vector256<int> upperIntegers = Vector256.Create(Vector128.WidenLower(upperShorts), Vector128.WidenUpper(upperShorts));
+                    Vector512<int> integers = Vector512.Create(lowerIntegers, upperIntegers);
+                    Unsafe.As<Vector4, Vector512<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToVector4(Vector512.ConvertToSingle(integers), scaled);
                 }
             }
 
-            if (Avx2.IsSupported)
+            if (Vector256.IsHardwareAccelerated)
             {
                 int pixelsPerVector = Vector256<float>.Count / Vector128<float>.Count;
 
                 for (; i <= source.Length - pixelsPerVector; i += pixelsPerVector)
                 {
                     ulong packed = Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref sourceBase, (uint)(i * componentsPerPixel)));
-                    Vector256<int> integers = Avx2.ConvertToVector256Int32(Vector128.CreateScalarUnsafe(packed).AsSByte());
-                    Unsafe.As<Vector4, Vector256<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToVector4(Avx.ConvertToVector256Single(integers), scaled);
+                    Vector128<short> shorts = Vector128.WidenLower(Vector128.CreateScalarUnsafe(packed).AsSByte());
+                    Vector256<int> integers = Vector256.Create(Vector128.WidenLower(shorts), Vector128.WidenUpper(shorts));
+                    Unsafe.As<Vector4, Vector256<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToVector4(Vector256.ConvertToSingle(integers), scaled);
                 }
             }
 
@@ -162,6 +170,9 @@ public partial struct NormalizedByte4P
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector512<float> ToVector4(Vector512<float> source, bool scaled)
         {
+            // Both minimum two's-complement SNORM encodings represent -1.
+            source = Vector512.Max(source, Vector512.Create(-MaxPos));
+
             if (scaled)
             {
                 // Offset exact integer components before division to avoid cancellation near the signed-normalized lower bound.
@@ -180,6 +191,9 @@ public partial struct NormalizedByte4P
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<float> ToVector4(Vector256<float> source, bool scaled)
         {
+            // Both minimum two's-complement SNORM encodings represent -1.
+            source = Vector256.Max(source, Vector256.Create(-MaxPos));
+
             if (scaled)
             {
                 // Offset exact integer components before division to avoid cancellation near the signed-normalized lower bound.
@@ -198,6 +212,9 @@ public partial struct NormalizedByte4P
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector128<float> ToVector4(Vector128<float> source, bool scaled)
         {
+            // Both minimum two's-complement SNORM encodings represent -1.
+            source = Vector128.Max(source, Vector128.Create(-MaxPos));
+
             if (scaled)
             {
                 // Offset exact integer components before division to avoid cancellation near the signed-normalized lower bound.
@@ -222,27 +239,33 @@ public partial struct NormalizedByte4P
             int componentsPerPixel = Vector128<float>.Count;
             int i = 0;
 
-            if (Vector512.IsHardwareAccelerated && Avx512F.IsSupported)
+            // Portable widening advances one integer width at a time, so assemble the wider vectors from ordered 128-bit halves.
+            if (Vector512.IsHardwareAccelerated)
             {
                 int pixelsPerVector = Vector512<float>.Count / Vector128<float>.Count;
 
                 for (; i <= source.Length - pixelsPerVector; i += pixelsPerVector)
                 {
                     Vector128<sbyte> packed = Vector128.LoadUnsafe(ref sourceBase, (nuint)(i * componentsPerPixel)).AsSByte();
-                    Vector512<int> integers = Avx512F.ConvertToVector512Int32(packed);
-                    Unsafe.As<Vector4, Vector512<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToUnassociatedVector4(Avx512F.ConvertToVector512Single(integers), scaled);
+                    Vector128<short> lowerShorts = Vector128.WidenLower(packed);
+                    Vector128<short> upperShorts = Vector128.WidenUpper(packed);
+                    Vector256<int> lowerIntegers = Vector256.Create(Vector128.WidenLower(lowerShorts), Vector128.WidenUpper(lowerShorts));
+                    Vector256<int> upperIntegers = Vector256.Create(Vector128.WidenLower(upperShorts), Vector128.WidenUpper(upperShorts));
+                    Vector512<int> integers = Vector512.Create(lowerIntegers, upperIntegers);
+                    Unsafe.As<Vector4, Vector512<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToUnassociatedVector4(Vector512.ConvertToSingle(integers), scaled);
                 }
             }
 
-            if (Avx2.IsSupported)
+            if (Vector256.IsHardwareAccelerated)
             {
                 int pixelsPerVector = Vector256<float>.Count / Vector128<float>.Count;
 
                 for (; i <= source.Length - pixelsPerVector; i += pixelsPerVector)
                 {
                     ulong packed = Unsafe.ReadUnaligned<ulong>(ref Unsafe.Add(ref sourceBase, (uint)(i * componentsPerPixel)));
-                    Vector256<int> integers = Avx2.ConvertToVector256Int32(Vector128.CreateScalarUnsafe(packed).AsSByte());
-                    Unsafe.As<Vector4, Vector256<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToUnassociatedVector4(Avx.ConvertToVector256Single(integers), scaled);
+                    Vector128<short> shorts = Vector128.WidenLower(Vector128.CreateScalarUnsafe(packed).AsSByte());
+                    Vector256<int> integers = Vector256.Create(Vector128.WidenLower(shorts), Vector128.WidenUpper(shorts));
+                    Unsafe.As<Vector4, Vector256<float>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = ToUnassociatedVector4(Vector256.ConvertToSingle(integers), scaled);
                 }
             }
 
@@ -277,6 +300,8 @@ public partial struct NormalizedByte4P
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector512<float> ToUnassociatedVector4(Vector512<float> source, bool scaled)
         {
+            // Clamp the duplicate SNORM minimum encoding before converting it to the nonnegative associated domain.
+            source = Vector512.Max(source, Vector512.Create(-MaxPos));
             source += Vector512.Create(MaxPos);
             Vector512<float> alpha = Vector512_.ShuffleNative(source, 0b_11_11_11_11);
             Vector512<float> alphaMask = Vector512.Create(0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1, 0, 0, 0, -1).AsSingle();
@@ -297,6 +322,8 @@ public partial struct NormalizedByte4P
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector256<float> ToUnassociatedVector4(Vector256<float> source, bool scaled)
         {
+            // Clamp the duplicate SNORM minimum encoding before converting it to the nonnegative associated domain.
+            source = Vector256.Max(source, Vector256.Create(-MaxPos));
             source += Vector256.Create(MaxPos);
             Vector256<float> alpha = Vector256_.ShuffleNative(source, 0b_11_11_11_11);
             Vector256<float> alphaMask = Vector256.Create(0, 0, 0, -1, 0, 0, 0, -1).AsSingle();
@@ -317,6 +344,8 @@ public partial struct NormalizedByte4P
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static Vector128<float> ToUnassociatedVector4(Vector128<float> source, bool scaled)
         {
+            // Clamp the duplicate SNORM minimum encoding before converting it to the nonnegative associated domain.
+            source = Vector128.Max(source, Vector128.Create(-MaxPos));
             source += Vector128.Create(MaxPos);
             Vector128<float> alpha = Vector128_.ShuffleNative(source, 0b_11_11_11_11);
             Vector128<float> alphaMask = Vector128.Create(0, 0, 0, -1).AsSingle();
@@ -663,14 +692,23 @@ public partial struct NormalizedByte4P
             ref NormalizedByte4P destinationBase = ref MemoryMarshal.GetReference(destination);
             int i = 0;
 
-            if (Vector512.IsHardwareAccelerated && Avx512F.IsSupported)
+            if (Vector512.IsHardwareAccelerated)
             {
                 int pixelsPerVector = Vector512<float>.Count / Vector128<float>.Count;
 
                 for (; i <= source.Length - pixelsPerVector; i += pixelsPerVector)
                 {
                     Vector512<float> vector = Unsafe.As<Vector4, Vector512<float>>(ref Unsafe.Add(ref sourceBase, (uint)i));
-                    Vector128<sbyte> packed = Avx512F.ConvertToVector128SByteWithSaturation(ConvertToPackedInt32(vector, scaled));
+                    Vector512<int> integers = ConvertToPackedInt32(vector, scaled);
+                    Vector256<short> shorts = Vector256_.PackSignedSaturate(integers.GetLower(), integers.GetUpper());
+                    Vector128<sbyte> packed = Vector128_.PackSignedSaturate(shorts.GetLower(), shorts.GetUpper());
+
+                    if (Avx2.IsSupported)
+                    {
+                        // AVX2 narrows each 128-bit lane independently, placing the middle two pixels out of order.
+                        packed = Vector128_.ShuffleNative(packed.AsSingle(), RestorePackedPixelOrder).AsSByte();
+                    }
+
                     Unsafe.As<NormalizedByte4P, Vector128<sbyte>>(ref Unsafe.Add(ref destinationBase, (uint)i)) = packed;
                 }
             }
