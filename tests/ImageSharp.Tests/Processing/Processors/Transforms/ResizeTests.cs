@@ -700,6 +700,20 @@ public class ResizeTests
     }
 
     [Theory]
+    [InlineData(1024)]
+    [InlineData(2048)]
+    public void Issue3156_CanResizeLargeSquareToSinglePixel(int length)
+    {
+        Rgba32 white = Color.White.ToPixel<Rgba32>();
+        using Image<Rgba32> image = new(length, length, white);
+
+        image.Mutate(x => x.Resize(1, 1));
+
+        Assert.Equal(new Size(1, 1), image.Size);
+        Assert.Equal(white, image[0, 0]);
+    }
+
+    [Theory]
     [WithTestPatternImages(100, 100, PixelTypes.Rgba32)]
     public void ResizeUpdatesSubject<TPixel>(TestImageProvider<TPixel> provider)
         where TPixel : unmanaged, IPixel<TPixel>
