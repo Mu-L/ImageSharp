@@ -371,6 +371,22 @@ public class TiffDecoderTests : TiffDecoderBaseTester
     }
 
     [Theory]
+    [WithFile(Icc.PerceptualRgb8, PixelTypes.Rgba32)]
+    [WithFile(Icc.PerceptualRgb16, PixelTypes.Rgba32)]
+    public void Decode_WhenColorProfileHandlingIsPreserve_PreservesIccProfile<TPixel>(TestImageProvider<TPixel> provider)
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        DecoderOptions options = new() { ColorProfileHandling = ColorProfileHandling.Preserve };
+        using Image<TPixel> image = provider.GetImage(TiffDecoder.Instance, options);
+
+        Assert.NotNull(image.Metadata.IccProfile);
+        Assert.NotSame(image.Frames.RootFrame.Metadata.IccProfile, image.Metadata.IccProfile);
+        Assert.Equal(
+            image.Frames.RootFrame.Metadata.IccProfile.ToByteArray(),
+            image.Metadata.IccProfile.ToByteArray());
+    }
+
+    [Theory]
     [WithFile(Issues2454_A, PixelTypes.Rgba32)]
     [WithFile(Issues2454_B, PixelTypes.Rgba32)]
     public void TiffDecoder_CanDecode_YccK<TPixel>(TestImageProvider<TPixel> provider)
