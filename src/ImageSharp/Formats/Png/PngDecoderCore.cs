@@ -321,7 +321,7 @@ internal sealed class PngDecoderCore : ImageDecoderCore
                         case PngChunkType.End:
                             goto EOF;
                         case PngChunkType.ProprietaryApple:
-                            this.isCgbi = true;
+                            this.ReadCgbiChunk();
                             break;
                     }
                 }
@@ -525,7 +525,7 @@ internal sealed class PngDecoderCore : ImageDecoderCore
                             goto EOF;
 
                         case PngChunkType.ProprietaryApple:
-                            this.isCgbi = true;
+                            this.ReadCgbiChunk();
                             break;
 
                         default:
@@ -788,7 +788,7 @@ internal sealed class PngDecoderCore : ImageDecoderCore
             return;
         }
 
-        using ZlibInflateStream inflateStream = new(this.currentStream, getData);
+        using ZlibInflateReader inflateStream = new(this.currentStream, getData);
         if (!inflateStream.AllocateNewBytes(chunkLength, !this.hasImageData))
         {
             return;
@@ -1458,6 +1458,21 @@ internal sealed class PngDecoderCore : ImageDecoderCore
         }
     }
 
+    /// <summary>
+    /// Marks the image as CgBI and validates a header that has already been read.
+    /// </summary>
+    private void ReadCgbiChunk()
+    {
+        this.isCgbi = true;
+
+        // Although Apple's pngcrush normally writes CgBI before IHDR, accepting the
+        // reverse order must apply the same compatibility validation.
+        if (!Equals(this.header, default(PngHeader)))
+        {
+            ThrowIfInvalidCgbiContent(this.header);
+        }
+    }
+
     private static void ThrowIfInvalidCgbiContent(in PngHeader header)
     {
         if (header.BitDepth != 8 || (header.ColorType is not PngColorType.Rgb and not PngColorType.RgbWithAlpha))
@@ -1952,7 +1967,7 @@ internal sealed class PngDecoderCore : ImageDecoderCore
             using MemoryStream memoryStreamOutput = new(compressedData.Length);
             using UnmanagedMemoryStream memoryStreamInput = new(compressedDataBase, compressedData.Length);
             using BufferedReadStream bufferedStream = new(this.configuration, memoryStreamInput);
-            using ZlibInflateStream inflateStream = new(bufferedStream);
+            using ZlibInflateReader inflateStream = new(bufferedStream);
 
             Span<byte> destUncompressedData = destBuffer.GetSpan();
             if (!inflateStream.AllocateNewBytes(compressedData.Length, false))

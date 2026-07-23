@@ -12,7 +12,7 @@ namespace SixLabors.ImageSharp.Compression.Zlib;
 /// <see cref="DeflateStream"/> over the remaining DEFLATE payload. The
 /// Adler-32 trailer is not validated.
 /// </summary>
-internal sealed class ZlibInflateStream : IDisposable
+internal sealed class ZlibInflateReader : IDisposable
 {
     /// <summary>
     /// Used to read the Adler-32 and Crc-32 checksums.
@@ -23,10 +23,10 @@ internal sealed class ZlibInflateStream : IDisposable
 
     private readonly ChunkedReadStream segmentStream;
 
-    public ZlibInflateStream(BufferedReadStream innerStream)
+    public ZlibInflateReader(BufferedReadStream innerStream)
         => this.segmentStream = new ChunkedReadStream(innerStream);
 
-    public ZlibInflateStream(BufferedReadStream innerStream, Func<int> getData)
+    public ZlibInflateReader(BufferedReadStream innerStream, Func<int> getData)
         => this.segmentStream = new ChunkedReadStream(innerStream, getData);
 
     /// <summary>
