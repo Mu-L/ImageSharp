@@ -7,8 +7,10 @@ using System.Numerics;
 using System.Runtime.CompilerServices;
 using SixLabors.ImageSharp.Formats;
 using SixLabors.ImageSharp.Formats.Bmp;
+using SixLabors.ImageSharp.Formats.Cur;
 using SixLabors.ImageSharp.Formats.Exr;
 using SixLabors.ImageSharp.Formats.Gif;
+using SixLabors.ImageSharp.Formats.Ico;
 using SixLabors.ImageSharp.Formats.Jpeg;
 using SixLabors.ImageSharp.Formats.Jpeg.Components;
 using SixLabors.ImageSharp.Formats.Jpeg.Components.Decoder;
@@ -129,6 +131,67 @@ internal static class AotCompilerTools
     }
 
     /// <summary>
+    /// Seeds the modern .NET AOT compiler with bulk pixel operations for every built-in pixel format.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    /// This method is used for AOT code generation only. Do not call it at runtime.
+    /// </exception>
+    [Preserve]
+    public static void SeedPixelOperations()
+    {
+        try
+        {
+            // Keep this inventory finite and explicit. ImageSharp cannot precompile consumer-defined pixel types, while
+            // these closed calls make every built-in specialization visible without retaining the much larger legacy seed graph.
+            AotCompilePixelOperations<A8>();
+            AotCompilePixelOperations<Argb32>();
+            AotCompilePixelOperations<Argb32P>();
+            AotCompilePixelOperations<Abgr32>();
+            AotCompilePixelOperations<Abgr32P>();
+            AotCompilePixelOperations<Bgr24>();
+            AotCompilePixelOperations<Bgr565>();
+            AotCompilePixelOperations<Bgra32>();
+            AotCompilePixelOperations<Bgra32P>();
+            AotCompilePixelOperations<Bgra4444>();
+            AotCompilePixelOperations<Bgra5551>();
+            AotCompilePixelOperations<Byte4>();
+            AotCompilePixelOperations<L16>();
+            AotCompilePixelOperations<L8>();
+            AotCompilePixelOperations<La16>();
+            AotCompilePixelOperations<La32>();
+            AotCompilePixelOperations<HalfSingle>();
+            AotCompilePixelOperations<HalfVector2>();
+            AotCompilePixelOperations<HalfVector4>();
+            AotCompilePixelOperations<HalfVector4P>();
+            AotCompilePixelOperations<NormalizedByte2>();
+            AotCompilePixelOperations<NormalizedByte4>();
+            AotCompilePixelOperations<NormalizedByte4P>();
+            AotCompilePixelOperations<NormalizedShort2>();
+            AotCompilePixelOperations<NormalizedShort4>();
+            AotCompilePixelOperations<Rg32>();
+            AotCompilePixelOperations<Rgb24>();
+            AotCompilePixelOperations<Rgb48>();
+            AotCompilePixelOperations<Rgb96>();
+            AotCompilePixelOperations<Rgba1010102>();
+            AotCompilePixelOperations<Rgba128>();
+            AotCompilePixelOperations<Rgba32>();
+            AotCompilePixelOperations<Rgba32P>();
+            AotCompilePixelOperations<Rgba64>();
+            AotCompilePixelOperations<RgbaHalf>();
+            AotCompilePixelOperations<RgbaHalfP>();
+            AotCompilePixelOperations<RgbaVector>();
+            AotCompilePixelOperations<Short2>();
+            AotCompilePixelOperations<Short4>();
+        }
+        catch
+        {
+            // The calls only need to exist in IL; this method must never contribute a runtime execution path.
+        }
+
+        throw new InvalidOperationException("This method is used for AOT code generation only. Do not call it at runtime.");
+    }
+
+    /// <summary>
     /// Seeds the compiler using the given pixel format.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
@@ -138,6 +201,7 @@ internal static class AotCompilerTools
     {
         // This is we actually call all the individual methods you need to seed.
         AotCompileImage<TPixel>();
+        AotCompilePixelOperations<TPixel>();
         AotCompileImageProcessingContextFactory<TPixel>();
         AotCompileImageEncoderInternals<TPixel>();
         AotCompileImageDecoderInternals<TPixel>();
@@ -156,6 +220,68 @@ internal static class AotCompilerTools
         _ = Unsafe.SizeOf<TPixel>();
 
         // TODO: Do the discovery work to figure out what works and what doesn't.
+    }
+
+    /// <summary>
+    /// Seeds the selected <see cref="PixelOperations{TPixel}"/> methods required by Mono WASM AOT.
+    /// </summary>
+    /// <typeparam name="TPixel">The pixel format.</typeparam>
+    [Preserve]
+    private static void AotCompilePixelOperations<TPixel>()
+        where TPixel : unmanaged, IPixel<TPixel>
+    {
+        // These default arguments are never consumed. Direct calls are required so the IL contains the exact closed
+        // MethodSpecs that Mono WASM AOT can otherwise miss when following static-abstract pixel dispatch indirectly.
+        PixelOperations<TPixel> operations = PixelOperations<TPixel>.Instance;
+
+        _ = operations.GetPixelTypeInfo();
+        _ = operations.GetPixelBlender(default(GraphicsOptions));
+        _ = operations.GetPixelBlender(default, default);
+        operations.FromVector4Destructive(default, default, default);
+        operations.FromVector4Destructive(default, default, default, default);
+        operations.ToVector4(default, default, default);
+        operations.ToVector4(default, default, default, default);
+        operations.PackFromRgbPlanes(default, default, default, default);
+        operations.UnpackIntoRgbPlanes(default, default, default, default);
+
+        operations.FromArgb32Bytes(default, default, default, default);
+        operations.ToArgb32Bytes(default, default, default, default);
+
+        operations.FromAbgr32Bytes(default, default, default, default);
+        operations.ToAbgr32Bytes(default, default, default, default);
+
+        operations.FromBgr24Bytes(default, default, default, default);
+        operations.ToBgr24Bytes(default, default, default, default);
+
+        operations.FromBgra32Bytes(default, default, default, default);
+        operations.ToBgra32Bytes(default, default, default, default);
+
+        operations.FromL8Bytes(default, default, default, default);
+        operations.ToL8Bytes(default, default, default, default);
+
+        operations.FromL16Bytes(default, default, default, default);
+        operations.ToL16Bytes(default, default, default, default);
+
+        operations.FromLa16Bytes(default, default, default, default);
+        operations.ToLa16Bytes(default, default, default, default);
+
+        operations.FromLa32Bytes(default, default, default, default);
+        operations.ToLa32Bytes(default, default, default, default);
+
+        operations.FromRgb24Bytes(default, default, default, default);
+        operations.ToRgb24Bytes(default, default, default, default);
+
+        operations.FromRgba32Bytes(default, default, default, default);
+        operations.ToRgba32Bytes(default, default, default, default);
+
+        operations.FromRgb48Bytes(default, default, default, default);
+        operations.ToRgb48Bytes(default, default, default, default);
+
+        operations.FromRgba64Bytes(default, default, default, default);
+        operations.ToRgba64Bytes(default, default, default, default);
+
+        operations.FromBgra5551Bytes(default, default, default, default);
+        operations.ToBgra5551Bytes(default, default, default, default);
     }
 
     /// <summary>
@@ -229,8 +355,10 @@ internal static class AotCompilerTools
         where TPixel : unmanaged, IPixel<TPixel>
     {
         default(BmpEncoderCore).Encode<TPixel>(default, default, default);
+        default(CurEncoderCore).Encode<TPixel>(default, default, default);
         default(ExrEncoderCore).Encode<TPixel>(default, default, default);
         default(GifEncoderCore).Encode<TPixel>(default, default, default);
+        default(IcoEncoderCore).Encode<TPixel>(default, default, default);
         default(JpegEncoderCore).Encode<TPixel>(default, default, default);
         default(PbmEncoderCore).Encode<TPixel>(default, default, default);
         default(PngEncoderCore).Encode<TPixel>(default, default, default);
@@ -249,8 +377,10 @@ internal static class AotCompilerTools
         where TPixel : unmanaged, IPixel<TPixel>
     {
         default(BmpDecoderCore).Decode<TPixel>(default, default, default);
+        default(CurDecoderCore).Decode<TPixel>(default, default, default);
         default(ExrDecoderCore).Decode<TPixel>(default, default, default);
         default(GifDecoderCore).Decode<TPixel>(default, default, default);
+        default(IcoDecoderCore).Decode<TPixel>(default, default, default);
         default(JpegDecoderCore).Decode<TPixel>(default, default, default);
         default(PbmDecoderCore).Decode<TPixel>(default, default, default);
         default(PngDecoderCore).Decode<TPixel>(default, default, default);
@@ -270,11 +400,14 @@ internal static class AotCompilerTools
     {
         AotCompileImageEncoder<TPixel, WebpEncoder>();
         AotCompileImageEncoder<TPixel, BmpEncoder>();
+        AotCompileImageEncoder<TPixel, CurEncoder>();
         AotCompileImageEncoder<TPixel, ExrEncoder>();
         AotCompileImageEncoder<TPixel, GifEncoder>();
+        AotCompileImageEncoder<TPixel, IcoEncoder>();
         AotCompileImageEncoder<TPixel, JpegEncoder>();
         AotCompileImageEncoder<TPixel, PbmEncoder>();
         AotCompileImageEncoder<TPixel, PngEncoder>();
+        AotCompileImageEncoder<TPixel, QoiEncoder>();
         AotCompileImageEncoder<TPixel, TgaEncoder>();
         AotCompileImageEncoder<TPixel, TiffEncoder>();
     }
@@ -289,11 +422,14 @@ internal static class AotCompilerTools
     {
         AotCompileImageDecoder<TPixel, WebpDecoder>();
         AotCompileImageDecoder<TPixel, BmpDecoder>();
+        AotCompileImageDecoder<TPixel, CurDecoder>();
         AotCompileImageDecoder<TPixel, ExrDecoder>();
         AotCompileImageDecoder<TPixel, GifDecoder>();
+        AotCompileImageDecoder<TPixel, IcoDecoder>();
         AotCompileImageDecoder<TPixel, JpegDecoder>();
         AotCompileImageDecoder<TPixel, PbmDecoder>();
         AotCompileImageDecoder<TPixel, PngDecoder>();
+        AotCompileImageDecoder<TPixel, QoiDecoder>();
         AotCompileImageDecoder<TPixel, TgaDecoder>();
         AotCompileImageDecoder<TPixel, TiffDecoder>();
     }
