@@ -223,7 +223,7 @@ internal static class AotCompilerTools
     }
 
     /// <summary>
-    /// Seeds every bulk operation exposed by <see cref="PixelOperations{TPixel}"/>.
+    /// Seeds the selected <see cref="PixelOperations{TPixel}"/> methods required by Mono WASM AOT.
     /// </summary>
     /// <typeparam name="TPixel">The pixel format.</typeparam>
     [Preserve]
@@ -232,8 +232,7 @@ internal static class AotCompilerTools
     {
         // These default arguments are never consumed. Direct calls are required so the IL contains the exact closed
         // MethodSpecs that Mono WASM AOT can otherwise miss when following static-abstract pixel dispatch indirectly.
-        _ = PixelOperations<TPixel>.Instance;
-        PixelOperations<TPixel> operations = default;
+        PixelOperations<TPixel> operations = PixelOperations<TPixel>.Instance;
 
         _ = operations.GetPixelTypeInfo();
         _ = operations.GetPixelBlender(default(GraphicsOptions));
